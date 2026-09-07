@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import Foundation
 
-enum NarrationRenderPlanError: Error, Equatable {
+nonisolated enum NarrationRenderPlanError: Error, Equatable {
     case contextualEvidenceIdentityMismatch
 }
 
-struct NarrationRenderPlan: Equatable, Sendable {
+nonisolated struct NarrationRenderPlan: Equatable, Sendable {
     let blocks: [NarrationPlannedBlock]
 
     var pronunciationAuditDiagnostics: [PronunciationAuditDiagnostic] {
@@ -13,12 +13,12 @@ struct NarrationRenderPlan: Equatable, Sendable {
     }
 }
 
-struct NarrationPreparedBlock: Equatable, Sendable {
+nonisolated struct NarrationPreparedBlock: Equatable, Sendable {
     let block: EPubBlockRecord
     let pronunciationDecisionSeeds: [PronunciationDecisionSeed]
 }
 
-struct NarrationPlannedBlock: Equatable, Sendable {
+nonisolated struct NarrationPlannedBlock: Equatable, Sendable {
     let blockID: String
     let originalBlock: EPubBlockRecord
     let synthesisChunks: [PlannedSynthesisChunk]
@@ -73,7 +73,7 @@ struct NarrationPlannedBlock: Equatable, Sendable {
     }
 }
 
-enum NarrationPlannedSilence: Equatable, Sendable {
+nonisolated enum NarrationPlannedSilence: Equatable, Sendable {
     case paragraph
     case heading
     case sectionBreak
