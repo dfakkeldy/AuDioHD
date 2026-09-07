@@ -184,7 +184,8 @@ import Testing
         failure: ContextualModelFailure? = nil
     ) -> ContextualPronunciationEvidence {
         ContextualPronunciationEvidence(
-            occurrenceID: "9263c930876e89b6de947c09932eee9ccd281d3851c1c845cadc921e3ab916a5",
+            occurrenceID: ContextualPronunciationOccurrenceID.make(
+                blockID: "context", wordStart: 1, wordEnd: 1, normalizedWord: "record"),
             familyID: "record",
             candidatePackVersion: ContextualPronunciationFamilies.candidatePackVersion,
             submittedCandidateIDs: ["record.noun", "record.verb"],
@@ -202,7 +203,7 @@ import Testing
                 ? .shadowModelFailure
                 : availability == .available
                     ? .shadowObserved
-                    : .shadowModelUnavailable,
+                    : availability == .notRequested ? .shadowNotRequested : .shadowModelUnavailable,
             promptSchemaVersion: ContextualPronunciationFamilies.promptSchemaVersion,
             platform: "test",
             osBuild: "test-build",
@@ -654,7 +655,8 @@ import Testing
                 diagnostics: [])
         }
 
-        for decision in [selected, needsReview, unavailable, failure] {
+        let notRequested = contextualDecision(evidence: contextualEvidence(availability: .notRequested))
+        for decision in [selected, needsReview, unavailable, failure, notRequested] {
             let receipt = manifest(for: decision)
             #expect(receipt.coverage == .complete)
             let decoded = try JSONDecoder().decode(

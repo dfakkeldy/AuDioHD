@@ -88,7 +88,8 @@ import Testing
 
     private func shadowDisagreementEvidence() -> ContextualPronunciationEvidence {
         ContextualPronunciationEvidence(
-            occurrenceID: "9a34ace76be3632e6855dc05a2f77da70a3d9eaa1649dd84967601cd4ad31617",
+            occurrenceID: ContextualPronunciationOccurrenceID.make(
+                blockID: "s0-b0", wordStart: 0, wordEnd: 0, normalizedWord: "record"),
             familyID: "record",
             candidatePackVersion: ContextualPronunciationFamilies.candidatePackVersion,
             submittedCandidateIDs: ["record.noun", "record.verb"],
