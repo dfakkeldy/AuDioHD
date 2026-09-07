@@ -627,6 +627,13 @@ nonisolated enum HomographPronunciationResolver {
     private static func recordResolution(at index: Int, tokens: [Token]) -> Resolution? {
         let previous = previousLowercased(tokens, index)
 
+        // The new personal-subject shortcut is for ordinary prose. Preserve
+        // abstention for emphatic capitals and potential named uses.
+        if ["i", "we", "you", "they"].contains(previous ?? ""),
+            tokens[index].text != tokens[index].lowercased {
+            return nil
+        }
+
         // The attributive compound-noun guard ("record sales", "record labels")
         // only applies to a follower in the *same* sentence. Word tokenization
         // ignores punctuation, so without this a period between clauses

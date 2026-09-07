@@ -38,6 +38,11 @@ import Testing
                 == source.replacingOccurrences(of: "record", with: "[record](/ɹəkˈɔɹd/)"))
     }
 
+    @Test func personalSubjectDoesNotForceCapitalizedRecord() {
+        #expect(HomographPronunciationResolver.contextualAnalysis(
+            in: "They RECORD each measurement.", wordStart: 1) == .abstained)
+    }
+
     @Test func contextualBatchMatchesSingleAnalysisWithOneTokenization() {
         let source = "I am content with this. I read it yesterday. I read every day."
         let wordStarts = [2, 6, 10]
