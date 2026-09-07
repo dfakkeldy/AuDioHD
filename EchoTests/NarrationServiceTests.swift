@@ -905,6 +905,7 @@ private actor ShadowEvaluatorRecorder {
         let evidence = try #require(
             plan.blocks.flatMap(\.pronunciationDecisions)
                 .compactMap(\.contextualEvidence).first)
+        #expect(NarrationService.debugRenderPlanningRanOnMainThread.withLock { $0 } == false)
         #expect(evidence.modelAvailability == .notRequested)
         #expect(evidence.acceptanceReason == .shadowNotRequested)
     }

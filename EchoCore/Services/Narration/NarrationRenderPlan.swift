@@ -90,7 +90,7 @@ enum NarrationPlannedSilence: Equatable, Sendable {
     }
 }
 
-enum NarrationRenderPlanner {
+nonisolated enum NarrationRenderPlanner {
     static func make(
         blocks: [EPubBlockRecord],
         overrides: PronunciationOverrides,
@@ -154,6 +154,7 @@ enum NarrationRenderPlanner {
         var planned: [NarrationPlannedBlock] = []
         var unusedContextualEvidence = contextualEvidence
         for preparedBlock in candidates {
+            try Task.checkCancellation()
             let block = preparedBlock.block
             let isCode = EPubBlockRecord.Kind(rawValue: block.blockKind) == .code
             let normalized =

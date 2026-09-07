@@ -1178,6 +1178,33 @@ final class NarrationService {
             blocks,
             occurrenceOverrides: occurrenceOverrides,
             fmEnabled: fmEnabled)
+        return try await Self.planPreparedBlocks(
+            preparedBlocks, overrides: overrides, pronunciationPack: pronunciationPack,
+            pronunciationAuditPack: pronunciationAuditPack,
+            contextualPronunciationEvaluator: contextualPronunciationEvaluator,
+            neuralEvaluator: neuralEvaluator)
+    }
+
+    #if DEBUG
+        nonisolated static let debugRenderPlanningRanOnMainThread = Mutex<Bool?>(nil)
+    #endif
+
+    /// A render unit owns its planner and mutable G2P cache entirely on the
+    /// cooperative executor. Only immutable Sendable inputs cross from the UI.
+    @concurrent
+    private nonisolated static func planPreparedBlocks(
+        _ preparedBlocks: [NarrationPreparedBlock],
+        overrides: PronunciationOverrides,
+        pronunciationPack: EnglishPronunciationPack,
+        pronunciationAuditPack: EnglishPronunciationAuditPack,
+        contextualPronunciationEvaluator: ContextualPronunciationBatchEvaluator,
+        neuralEvaluator: NeuralEvaluator?
+    ) async throws -> NarrationRenderPlan {
+        try Task.checkCancellation()
+        #if DEBUG
+            let isMain = Self.debugIsMainThread()
+            debugRenderPlanningRanOnMainThread.withLock { $0 = isMain }
+        #endif
         let contextualOccurrences = ContextualPronunciationDiscovery.discover(
             blocks: preparedBlocks.map(\.block), overrides: overrides)
         let contextualEvidence = try await ContextualPronunciationPreflight.run(

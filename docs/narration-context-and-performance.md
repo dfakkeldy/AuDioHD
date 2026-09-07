@@ -18,6 +18,8 @@ invalidates older speech after the contextual `content` and normalization fixes.
   order; source mismatches, duplicate addresses, authored pronunciation markup,
   and prose rewrites reject the complete response. Plain prose without candidate
   identifiers does not call the model. Normalization signature is version 2.
+- Chapter pronunciation planning runs off the UI actor, with cancellation checks
+  between blocks.
 - A render-unit cache reuses complete G2P results between split sizing and final
   planning. Keys include input and display text; storage is bounded to 64 entries
   with an 8 KiB combined input/display limit per entry. Long probes are not cached.
