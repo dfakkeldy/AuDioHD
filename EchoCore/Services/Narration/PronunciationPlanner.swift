@@ -8,6 +8,13 @@ nonisolated final class PronunciationPlanner {
     private let g2p: KokoroG2P
     private let injectedG2PResult: ((String, String) -> KokoroG2P.Result)?
     private let vocab: KokoroPhonemeVocab
+    private struct ResultKey: Hashable {
+        let input: String
+        let display: String
+    }
+    // Render-unit scoped. Bound both count and text size so long chapters or
+    // split probes cannot retain an unbounded set of token evidence.
+    private var results: [ResultKey: KokoroG2P.Result] = [:]
 
     init() throws {
         self.g2p = KokoroG2P()
@@ -114,7 +121,8 @@ nonisolated final class PronunciationPlanner {
     /// the ~12 MB Misaki lexicon loaded exactly once per render unit instead of
     /// forcing every caller to construct a second `KokoroG2P`.
     func phonemeCount(for text: String) -> Int {
-        g2p.phonemeCount(for: text)
+        result(for: text, displayText: MisakiPronunciationMarkup.displayText(from: text)).phonemes
+            .count
     }
 
     func validatedBaseIPA(for normalizedWord: String) -> String? {
@@ -140,9 +148,18 @@ nonisolated final class PronunciationPlanner {
     }
 
     private func result(for input: String, displayText: String) -> KokoroG2P.Result {
+        let key = ResultKey(input: input, display: displayText)
+        if let cached = results[key] { return cached }
+        let value: KokoroG2P.Result
         if let injectedG2PResult {
-            return injectedG2PResult(input, displayText)
+            value = injectedG2PResult(input, displayText)
+        } else {
+            value = g2p.result(for: input, displayText: displayText)
         }
-        return g2p.result(for: input, displayText: displayText)
+        if input.utf8.count + displayText.utf8.count <= 8_192 {
+            if results.count >= 64 { results.removeAll(keepingCapacity: true) }
+            results[key] = value
+        }
+        return value
     }
 }

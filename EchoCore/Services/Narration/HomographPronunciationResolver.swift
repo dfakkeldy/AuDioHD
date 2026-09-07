@@ -375,6 +375,47 @@ nonisolated enum HomographPronunciationResolver {
         let previous = previousLowercased(tokens, index)
         let next = nextLowercased(tokens, index, limit: 1)
 
+        // Resolve a linking verb through a bounded run of degree/negation
+        // modifiers before the quantity rule for "more content" can win.
+        // Existential "there is more content" remains a material noun.
+        let modifiers: Set<String> = [
+            "more", "less", "quite", "very", "perfectly", "entirely",
+            "fully", "completely", "not", "never", "still", "always", "so", "rather",
+        ]
+        var cursor = index
+        var skipped = 0
+        while cursor > tokens.startIndex, !tokens[cursor].startsSentence, skipped < 3,
+            modifiers.contains(tokens[cursor - 1].lowercased)
+        {
+            cursor -= 1
+            skipped += 1
+        }
+        if let linkingVerb = previousLowercased(tokens, cursor),
+            contentAdjectivePreceders.contains(linkingVerb)
+        {
+            let auxiliaries: Set<String> = [
+                "will", "would", "can", "could", "may", "might",
+                "shall", "should", "must", "has", "have", "had", "not", "never", "always", "still",
+            ]
+            var subjectCursor = cursor - 1
+            var subject = previousLowercased(tokens, subjectCursor)
+            while subjectCursor > 0, let word = subject, auxiliaries.contains(word) {
+                subjectCursor -= 1
+                subject = previousLowercased(tokens, subjectCursor)
+            }
+            let nounSubject = ["there", "here", "this", "that"].contains(subject ?? "")
+            if !nounSubject,
+                next.isEmpty || next.contains(where: contentSatisfiedFollowers.contains)
+            {
+                return Resolution(
+                    ipa: IPA.contentSatisfied,
+                    ruleID: "homograph.content.adjective.copula",
+                    rationale:
+                        "Satisfied-adjective pronunciation selected after a linking verb and optional modifiers."
+                )
+            }
+        }
+
         // A noun preceder ("the content", "audio content") wins outright, even
         // when a "to"/"with" follows: "Add content to the page." is the noun.
         if let cue = previous, contentNounPreceders.contains(cue) {
@@ -382,21 +423,6 @@ nonisolated enum HomographPronunciationResolver {
                 ipa: IPA.contentNoun,
                 ruleID: "homograph.content.noun.preceder",
                 rationale: "Noun pronunciation selected after “\(cue)”.")
-        }
-
-        // The "satisfied" adjective ("I am content with this narration") only
-        // applies when a copula/linking verb precedes *and* a "to"/"with"
-        // follows. A following "to"/"with" alone no longer flips the noun.
-        if let previous,
-            contentAdjectivePreceders.contains(previous),
-            let follower = next.first(where: contentSatisfiedFollowers.contains)
-        {
-            return Resolution(
-                ipa: IPA.contentSatisfied,
-                ruleID: "homograph.content.adjective.copula",
-                rationale:
-                    "Satisfied-adjective pronunciation selected after “\(previous)” before “\(follower)”."
-            )
         }
 
         if let cue = next.first(where: contentNounFollowers.contains) {

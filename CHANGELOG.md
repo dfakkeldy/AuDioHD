@@ -4,6 +4,15 @@ All notable changes to Echo: Audiobook Study Player.
 
 ## [Unreleased]
 
+- Narration improves satisfied-versus-material “content” handling, marks exact
+  contextual word occurrences, and supplies adjacent paragraph context for
+  explicit shadow audits. Ordinary rendering no longer waits for shadow model
+  inference. Identifier normalization preserves source characters, G2P planning
+  reuses bounded results, and CLI renders without word timings skip the duration
+  model. Added synthetic listening/benchmark tooling; automatic model pronunciation
+  choices remain pending qualification. See `docs/narration-context-and-performance.md`.
+
+
 ### Added
 - **PDFs can be narrated from the Mac app.** On-device narration of a PDF's extracted text has worked in `echo-cli narrate` and the headless runner since PDF import landed, but the Mac app could never reach it: the narrate open panel offered no PDF `UTType`, the folder sweep matched only `.epub`, and `MacBatchProcessingService` fell a queued PDF through to `EPUBImportCoordinator`, which failed it as an empty import. Batch ▸ "Narrate Documents…" (renamed from "Narrate EPUB(s)…", still ⌘⌥N) now accepts `.pdf` alongside EPUB and Markdown/plain text, a selected folder is swept for both `.epub` and `.pdf` (`FolderAudioScanner.narratableDocumentExtensions`), and the queue routes PDFs through the shared `PDFAutoImportScanner.importPDFFile` with `force: true` — matching the headless runner, so re-queuing an item re-extracts instead of silently taking the "blocks already exist" fast path. Everything downstream was already extension-agnostic (it reads `epub_block` rows, and the sidecar path just swaps the extension), so read-along, chaptered playback, and `.m4b` export come along unchanged. No schema change. New tests: `MacImportParityTests.batchNarrationImportsPDFsThroughTheSharedScanner` and `.batchNarrationAcceptsPDFSelections`.
 - **Organized, reliable Audiobookshelf browsing and imports (iOS + macOS):** both platforms now share Newest Added, Title, Author, Series, and Publication Year sorts; searchable multi-select Author, Series, Genre, and Tag filters; **Not Added to Echo**; exact or clearly limited result counts; retained paging; and matching empty states. Imports now show transferred bytes plus staged Downloading, Extracting, Validating, and Adding to Echo progress, keep named failures visible with Cancel/Retry, and report Added only after supported local content and active-server provenance are verified. Success no longer sends the user back to Connections: the Added state remains available until **Open in Echo** is chosen explicitly, and a failed re-import preserves the previous completed copy. Streaming and fully resumable background transfers remain out of scope.

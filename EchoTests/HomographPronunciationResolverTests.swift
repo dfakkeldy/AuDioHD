@@ -4,6 +4,29 @@ import Testing
 @testable import Echo
 
 @Suite struct HomographPronunciationResolverTests {
+    @Test(arguments: [
+        "She was more content with her life.",
+        "She felt quite content.",
+        "They are not content with the answer.",
+        "I am content.",
+    ])
+    func satisfiedContentRecognizesLinkingVerbAndModifiers(_ source: String) {
+        #expect(
+            HomographPronunciationResolver.apply(to: source)
+                == source.replacingOccurrences(of: "content", with: "[content](/kəntˈɛnt/)"))
+    }
+
+    @Test(arguments: [
+        "There is more content with images.", "The app has more content.",
+        "There will be more content.", "There should be more content.",
+        "There has been more content.",
+    ])
+    func quantityContentRemainsNoun(_ source: String) {
+        #expect(
+            HomographPronunciationResolver.apply(to: source)
+                == source.replacingOccurrences(of: "content", with: "[content](/kˈɑntɛnt/)"))
+    }
+
     @Test func contextualBatchMatchesSingleAnalysisWithOneTokenization() {
         let source = "I am content with this. I read it yesterday. I read every day."
         let wordStarts = [2, 6, 10]

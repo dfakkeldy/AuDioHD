@@ -80,6 +80,9 @@ jobs:
       - name: Renderer installer tests (fast, no Xcode)
         run: make renderer-install-test
 
+      - name: Synthetic narration benchmark fixture tests
+        run: python3 -m unittest discover -s Tools/Pronunciation/tests -p test_narration_benchmark.py -v
+
       # The audio-judge suite measures real media with ffprobe and transcodes
       # a real MP3 with ffmpeg. Those are hard requirements in the suite's
       # setUp, not skip conditions: a silently skipped safety suite reports a

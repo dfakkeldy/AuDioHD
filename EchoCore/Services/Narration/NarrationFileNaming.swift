@@ -70,7 +70,8 @@ nonisolated enum NarrationFileNaming {
     /// ("Permit me", "Close the door", "Project the image") is retagged as a
     /// verb before lexicon lookup, changing narration bytes for the same
     /// source text.
-    static let renderVersion = 24
+    /// v25 = linking-verb content disambiguation and validated identifier splits.
+    static let renderVersion = 25
     /// Stable renderer-family identity persisted beside headless captures. The
     /// cache render version tracks byte-affecting revisions within this family;
     /// this value prevents a different engine/G2P stack from inheriting them.

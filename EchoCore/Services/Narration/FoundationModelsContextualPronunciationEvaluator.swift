@@ -12,6 +12,7 @@ nonisolated enum FoundationModelsContextualPronunciationEvaluator {
 
     private static let instructions = """
         Classify each target spelling by meaning and grammatical role.
+        When a sentence has <target> tags, classify only the enclosed occurrence.
         Return exactly one supplied candidate slot for every occurrence.
         Use needsReview when the supplied context does not determine a choice.
         Do not infer or return pronunciation, rewritten text, rationale, or confidence.
@@ -38,7 +39,7 @@ nonisolated enum FoundationModelsContextualPronunciationEvaluator {
             if let precedingSentence = occurrence.precedingSentence {
                 lines.append("Previous sentence: \(promptField(precedingSentence))")
             }
-            lines.append("Target sentence: \(promptField(occurrence.targetSentence))")
+            lines.append("Target sentence: \(markedSentence(for: occurrence))")
             if let followingSentence = occurrence.followingSentence {
                 lines.append("Next sentence: \(promptField(followingSentence))")
             }
@@ -52,6 +53,30 @@ nonisolated enum FoundationModelsContextualPronunciationEvaluator {
             return lines.joined(separator: "\n")
         }
         .joined(separator: "\n\n")
+    }
+
+    private static func markedSentence(for occurrence: ContextualPronunciationOccurrence) -> String
+    {
+        let sentence = occurrence.targetSentence
+        let ranges = WordTokenizer.wordRanges(in: sentence)
+        guard let index = occurrence.targetSentenceWordIndex, ranges.indices.contains(index) else {
+            return promptField(sentence)
+        }
+        let range = ranges[index]
+        func escaped(_ text: Substring) -> String {
+            String(text).replacingOccurrences(of: "&", with: "&amp;")
+                .replacingOccurrences(of: "<", with: "&lt;")
+                .replacingOccurrences(of: ">", with: "&gt;")
+        }
+        return promptField(
+            escaped(sentence[..<range.lowerBound])
+                + "<target>" + escaped(sentence[range]) + "</target>"
+                + escaped(sentence[range.upperBound...]))
+    }
+
+    /// Ordinary playback does not wait for audit-only model inference.
+    static func notRequestedEvaluator() -> ContextualPronunciationBatchEvaluator {
+        { _ in result(availability: .notRequested) }
     }
 
     static func validatedSelections(

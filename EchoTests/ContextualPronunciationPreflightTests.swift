@@ -256,7 +256,7 @@ private nonisolated enum PreflightFixtures {
         #expect(
             evidence.allSatisfy { evidence in
                 evidence.candidatePackVersion == "context-candidates-v1"
-                    && evidence.promptSchemaVersion == "context-shadow-v1"
+                    && evidence.promptSchemaVersion == "context-shadow-v2"
                     && evidence.submittedCandidateIDs == ["read-present", "read-past"]
                     && evidence.familyState == .shadow
                     && evidence.platform == "iOS"

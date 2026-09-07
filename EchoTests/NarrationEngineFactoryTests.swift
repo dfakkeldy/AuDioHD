@@ -5,8 +5,8 @@ import Testing
 @testable import Echo
 
 /// Pins the pure ONNX intra-op thread policy: divide performance cores across
-/// parallel jobs, clamped to the measured floor (2, the A14 baseline) and a
-/// saturation ceiling (4) — Kokoro-82M stops scaling past ~4 threads.
+/// parallel jobs, retaining the single-engine A14 baseline while allowing
+/// one thread per worker to avoid oversubscription.
 @Suite struct NarrationEngineFactoryTests {
 
     @Test func singleJobUsesUpToFourPerformanceCores() {
@@ -18,11 +18,11 @@ import Testing
     @Test func parallelJobsSplitTheCores() {
         #expect(NarrationEngineFactory.resolvedIntraOpThreads(performanceCores: 8, jobs: 2) == 4)
         #expect(NarrationEngineFactory.resolvedIntraOpThreads(performanceCores: 8, jobs: 4) == 2)
-        #expect(NarrationEngineFactory.resolvedIntraOpThreads(performanceCores: 4, jobs: 4) == 2)
+        #expect(NarrationEngineFactory.resolvedIntraOpThreads(performanceCores: 4, jobs: 4) == 1)
     }
 
-    @Test func neverDropsBelowMeasuredFloor() {
-        #expect(NarrationEngineFactory.resolvedIntraOpThreads(performanceCores: 2, jobs: 8) == 2)
+    @Test func singleJobKeepsMeasuredFloorWhileParallelJobsCanUseOneThread() {
+        #expect(NarrationEngineFactory.resolvedIntraOpThreads(performanceCores: 2, jobs: 8) == 1)
         #expect(NarrationEngineFactory.resolvedIntraOpThreads(performanceCores: 1, jobs: 1) == 2)
         #expect(NarrationEngineFactory.resolvedIntraOpThreads(performanceCores: 0, jobs: 0) == 2)
     }

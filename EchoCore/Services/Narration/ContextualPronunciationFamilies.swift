@@ -4,7 +4,7 @@
 /// Models select an opaque slot in later phases; IPA never becomes model output.
 nonisolated enum ContextualPronunciationFamilies {
     static let candidatePackVersion = "context-candidates-v1"
-    static let promptSchemaVersion = "context-shadow-v1"
+    static let promptSchemaVersion = "context-shadow-v2"
 
     private static let bySpelling: [String: ContextualPronunciationFamily] = [
         "content": family(

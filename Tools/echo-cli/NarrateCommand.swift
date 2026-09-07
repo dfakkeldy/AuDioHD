@@ -49,12 +49,30 @@ struct NarrateCommand: AsyncParsableCommand {
     @Flag(help: "Continue from existing .anchors markers.") var resume = false
     @Flag(
         name: .customLong("no-word-timings"),
-        help: "Write block-level anchors only (omit per-word timings from the sidecar).")
+        help: "Skip duration-model inference and write block-level sidecar anchors only.")
     var noWordTimings = false
     @Flag(
         name: .customLong("no-pronunciation-review"),
         help: "Do not write the pronunciation audit JSON or listening reel.")
     var noPronunciationReview = false
+    @Flag(
+        name: .customLong("contextual-pronunciation-audit"),
+        help:
+            "Evaluate contextual pronunciation choices for qualification (slower; does not change audio)."
+    )
+    var contextualPronunciationAudit = false
+
+    func validate() throws {
+        guard jobs > 0, threads.map({ $0 > 0 && $0 <= Int(Int32.max) }) ?? true else {
+            throw ValidationError(
+                "--jobs and --threads must be positive; threads must fit a 32-bit integer.")
+        }
+        guard !(resume && contextualPronunciationAudit) else {
+            throw ValidationError(
+                "--contextual-pronunciation-audit requires a fresh run; omit --resume and use a new --work-dir to preserve previous audio."
+            )
+        }
+    }
 
     @MainActor func run() async throws {
         EchoCLI.configureResources()
@@ -81,6 +99,7 @@ struct NarrateCommand: AsyncParsableCommand {
             coverArtData: coverArtData,
             maxNewChaptersPerRun: maxChapters,
             databaseURL: db.map { URL(fileURLWithPath: $0) },
+            enableContextualPronunciationAudit: contextualPronunciationAudit,
             includeWordTimings: !noWordTimings,
             jobs: max(1, jobs),
             intraOpThreads: threads.map(Int32.init),

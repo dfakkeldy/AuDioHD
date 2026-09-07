@@ -266,7 +266,8 @@ private actor ShadowEvaluatorRecorder {
         async throws
     {
         let db = try DatabaseService(inMemory: ())
-        let firstBlockText = String(repeating: "alpha ", count: 50) + ". "
+        let firstBlockText =
+            String(repeating: "alpha ", count: 50) + ". "
             + String(repeating: "bravo ", count: 50) + "."
         let blocks = try seed(
             db,
@@ -287,9 +288,10 @@ private actor ShadowEvaluatorRecorder {
                 return blockID == "s0-b0" ? VoiceID("am_michael") : VoiceID("bf_emma")
             })
 
-        #expect(engine.calls.map(\.voice) == [
-            VoiceID("am_michael"), VoiceID("am_michael"), VoiceID("bf_emma"),
-        ])
+        #expect(
+            engine.calls.map(\.voice) == [
+                VoiceID("am_michael"), VoiceID("am_michael"), VoiceID("bf_emma"),
+            ])
         #expect(selections.withLock { $0 } == ["s0-b0": 1, "s0-b1": 1])
         #expect(rendered.anchors.map(\.epubBlockID) == ["s0-b0", "s0-b1"])
         #expect(rendered.anchors.allSatisfy { ($0.audioEndTime ?? $0.audioTime) > $0.audioTime })
@@ -308,11 +310,13 @@ private actor ShadowEvaluatorRecorder {
         #expect(words.count == firstBlockWords.count + secondBlockWords.count)
         #expect(words.map(\.source).allSatisfy { $0 == "synthesis" })
         #expect(words.map(\.epubBlockID).allSatisfy { $0 == "s0-b0" || $0 == "s0-b1" })
-        #expect(zip(words, words.dropFirst()).allSatisfy {
-            $0.audioStartTime <= $0.audioEndTime && $0.audioEndTime <= $1.audioStartTime
-        })
-        #expect((try #require(firstBlockWords.last)).audioEndTime <=
-            (try #require(secondBlockWords.first)).audioStartTime)
+        #expect(
+            zip(words, words.dropFirst()).allSatisfy {
+                $0.audioStartTime <= $0.audioEndTime && $0.audioEndTime <= $1.audioStartTime
+            })
+        #expect(
+            (try #require(firstBlockWords.last)).audioEndTime
+                <= (try #require(secondBlockWords.first)).audioStartTime)
     }
 
     @Test func plannedParagraphPauseAdvancesNextAnchorWithoutStretchingPreviousAnchor()
@@ -886,6 +890,53 @@ private actor ShadowEvaluatorRecorder {
         #expect(
             observedPlan.blocks.flatMap(\.synthesisChunks)
                 == deterministicPlan.blocks.flatMap(\.synthesisChunks))
+    }
+
+    @Test func ordinaryRenderRecordsThatShadowInferenceWasNotRequested() async throws {
+        let service = NarrationService(
+            db: try DatabaseService(inMemory: ()).writer, audiobookID: "b1",
+            tts: MockTTSEngine(), audioWriter: MockAudioWriter(),
+            cacheDirectory: FileManager.default.temporaryDirectory, state: NarrationState(),
+            fmEnabled: { false })
+        let plan = try await service.renderPlan(
+            for: [block("b1", id: "plain", seq: 0, text: "The content is useful.")],
+            overrides: PronunciationOverrides(entries: [:]), occurrenceOverrides: .empty,
+            fmEnabled: false)
+        let evidence = try #require(
+            plan.blocks.flatMap(\.pronunciationDecisions)
+                .compactMap(\.contextualEvidence).first)
+        #expect(evidence.modelAvailability == .notRequested)
+        #expect(evidence.acceptanceReason == .shadowNotRequested)
+    }
+
+    @Test func contextCrossesParagraphsWithoutChangingOccurrenceCoordinates() throws {
+        let blocks = [
+            block("b1", id: "before", seq: 0, text: "Yesterday we went to the library."),
+            block("b1", id: "target", seq: 1, text: "I read the record."),
+            block("b1", id: "after", seq: 2, text: "Then we went home."),
+        ]
+        let occurrences = ContextualPronunciationDiscovery.discover(
+            blocks: blocks, overrides: PronunciationOverrides(entries: [:]))
+        let target = try #require(occurrences.first { $0.targetWord == "read" })
+        #expect(target.precedingSentence == blocks[0].text)
+        #expect(target.followingSentence == blocks[2].text)
+        #expect(target.wordStart == 1)
+        #expect(target.targetSentenceWordIndex == 1)
+        let local = try #require(
+            ContextualPronunciationDiscovery.discover(
+                text: blocks[1].text!, blockID: "target"
+            ).first { $0.targetWord == "read" })
+        #expect(local.occurrenceID == target.occurrenceID)
+        var separated = blocks
+        separated[0].isHidden = true
+        separated[2].chapterIndex = 99
+        let isolated = try #require(
+            ContextualPronunciationDiscovery.discover(
+                blocks: separated, overrides: PronunciationOverrides(entries: [:])
+            )
+            .first { $0.targetWord == "read" })
+        #expect(isolated.precedingSentence == nil)
+        #expect(isolated.followingSentence == nil)
     }
 
     @Test func contextualShadowOutcomesCannotChangeNarrationOrCacheIdentity() async throws {

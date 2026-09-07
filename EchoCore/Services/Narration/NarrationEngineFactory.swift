@@ -17,17 +17,22 @@
         ///
         /// - Parameter intraOpThreads: ONNX intra-op thread count; `nil` uses the
         ///   platform default from `defaultIntraOpThreads(jobs:)`.
-        static func make(intraOpThreads: Int32? = nil) -> TTSEngine {
-            OnnxKokoroEngine(intraOpThreads: intraOpThreads ?? defaultIntraOpThreads())
+        static func make(intraOpThreads: Int32? = nil, generateWordTimings: Bool = true)
+            -> TTSEngine
+        {
+            OnnxKokoroEngine(
+                intraOpThreads: intraOpThreads ?? defaultIntraOpThreads(),
+                generateWordTimings: generateWordTimings)
         }
 
         /// Pure thread-count policy, unit-tested without sysctl: divide the
-        /// performance cores across `jobs` concurrent engines, but never drop
-        /// below the measured A14 baseline of 2 nor exceed 4 — Kokoro-82M's
+        /// performance cores across `jobs` concurrent engines. Preserve the
+        /// single-engine A14 baseline of 2, but allow one thread per parallel
+        /// worker rather than oversubscribing cores. Never exceed 4 — Kokoro-82M's
         /// intra-op scaling saturates quickly, and threads beyond ~4 only add
         /// scheduling overhead while starving parallel workers.
         static func resolvedIntraOpThreads(performanceCores: Int, jobs: Int) -> Int32 {
-            Int32(min(4, max(2, performanceCores / max(jobs, 1))))
+            Int32(min(4, max(jobs > 1 ? 1 : 2, performanceCores / max(jobs, 1))))
         }
 
         /// Platform default for the CPU EP's intra-op parallelism. iOS keeps the

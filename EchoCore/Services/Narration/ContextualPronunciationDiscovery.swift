@@ -5,6 +5,52 @@ import NaturalLanguage
 /// Finds known contextual ambiguities without changing narration text. The
 /// returned sentence window is local evidence for Phase 2 shadow evaluation.
 nonisolated enum ContextualPronunciationDiscovery {
+    /// Keeps occurrence coordinates local to their block while supplying the
+    /// closest visible prose at paragraph boundaries. Never crosses a chapter,
+    /// spine item, hidden block, or code block.
+    static func discover(
+        blocks: [EPubBlockRecord], overrides: PronunciationOverrides
+    ) -> [ContextualPronunciationOccurrence] {
+        let texts: [String?] = blocks.map { block in
+            guard !block.isHidden, block.blockKind != EPubBlockRecord.Kind.code.rawValue,
+                let text = block.text, !text.isEmpty
+            else { return nil }
+            return overrides.rewrite(to: text, blockID: block.id).text
+        }
+        func neighbor(_ index: Int, of target: Int, first: Bool) -> String? {
+            guard blocks.indices.contains(index),
+                blocks[index].chapterIndex == blocks[target].chapterIndex,
+                blocks[index].spineIndex == blocks[target].spineIndex,
+                let text = texts[index]
+            else { return nil }
+            let display = MisakiPronunciationMarkup.displayText(from: text)
+            let bounded = first ? String(display.prefix(600)) : String(display.suffix(600))
+            let tokenizer = NLTokenizer(unit: .sentence)
+            tokenizer.string = bounded
+            var sentence: String?
+            tokenizer.enumerateTokens(in: bounded.startIndex..<bounded.endIndex) { range, _ in
+                sentence = String(bounded[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+                return !first
+            }
+            return sentence
+        }
+        return blocks.indices.flatMap { index -> [ContextualPronunciationOccurrence] in
+            guard let text = texts[index] else { return [] }
+            let previous = neighbor(index - 1, of: index, first: false)
+            let following = neighbor(index + 1, of: index, first: true)
+            return discover(text: text, blockID: blocks[index].id).map { occurrence in
+                var result = occurrence
+                result.precedingSentence =
+                    occurrence.precedingSentence
+                    ?? previous
+                result.followingSentence =
+                    occurrence.followingSentence
+                    ?? following
+                return result
+            }
+        }
+    }
+
     struct OperationCounts {
         var sourceSnapshotConstructions = 0
         var sourceLinkInspections = 0
@@ -194,6 +240,14 @@ nonisolated enum ContextualPronunciationDiscovery {
             return sentenceText(at: following)
         }
 
+        func sentenceWordIndex(for sourceRange: Range<String.Index>, sentenceIndex: Int) -> Int? {
+            guard let word = wordSpan(containing: sourceRange)?.lowerBound,
+                let firstWord = firstRangeOverlapping(
+                    sentenceRanges[sentenceIndex], in: displayWordRanges)
+            else { return nil }
+            return word - firstWord
+        }
+
         private func displayRange(
             containing sourceRange: Range<String.Index>
         ) -> NSRange? {
@@ -368,7 +422,9 @@ nonisolated enum ContextualPronunciationDiscovery {
                     candidates: family.candidates,
                     deterministicCandidateID: analysis.candidateID,
                     deterministicRuleID: analysis.ruleID,
-                    deterministicStrength: analysis.strength))
+                    deterministicStrength: analysis.strength,
+                    targetSentenceWordIndex: sourceSnapshot.sentenceWordIndex(
+                        for: token.range, sentenceIndex: sentenceIndex)))
         }
         return occurrences
     }

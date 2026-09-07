@@ -57,7 +57,7 @@ import Testing
 
     @Test func candidateAndPromptVersionsAreStableAndListsStayBounded() {
         #expect(ContextualPronunciationFamilies.candidatePackVersion == "context-candidates-v1")
-        #expect(ContextualPronunciationFamilies.promptSchemaVersion == "context-shadow-v1")
+        #expect(ContextualPronunciationFamilies.promptSchemaVersion == "context-shadow-v2")
 
         for spelling in ["content", "read", "live", "lives", "record"] {
             let candidates = ContextualPronunciationFamilies.family(for: spelling)?.candidates ?? []
