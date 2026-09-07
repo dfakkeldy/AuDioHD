@@ -19,12 +19,22 @@ import Testing
     @Test(arguments: [
         "There is more content with images.", "The app has more content.",
         "There will be more content.", "There should be more content.",
-        "There has been more content.",
+        "There has been more content.", "There will also be more content.",
+        "There really is more content.", "The answer is more content.",
     ])
     func quantityContentRemainsNoun(_ source: String) {
         #expect(
             HomographPronunciationResolver.apply(to: source)
                 == source.replacingOccurrences(of: "content", with: "[content](/kˈɑntɛnt/)"))
+    }
+
+    @Test(arguments: [
+        "We record sales.", "They record labels.", "I record sales.", "You record sales.",
+    ])
+    func personalSubjectWinsOverRecordCompoundNoun(_ source: String) {
+        #expect(
+            HomographPronunciationResolver.apply(to: source)
+                == source.replacingOccurrences(of: "record", with: "[record](/ɹəkˈɔɹd/)"))
     }
 
     @Test func contextualBatchMatchesSingleAnalysisWithOneTokenization() {

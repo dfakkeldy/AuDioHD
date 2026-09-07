@@ -6,6 +6,8 @@ invalidates older speech after the contextual `content` and normalization fixes.
 
 ## Production behavior
 
+- Personal subjects select the verb in “We record sales” before compound-noun
+  handling can override it.
 - Linking verbs with degree/negation modifiers resolve satisfied `content`
   before the quantity-noun rule: “She was more content with her life.”
   Existential auxiliary chains keep the noun: “There will be more content.”

@@ -240,8 +240,8 @@ nonisolated enum ContextualPronunciationDiscovery {
             return sentenceText(at: following)
         }
 
-        func sentenceWordIndex(for sourceRange: Range<String.Index>, sentenceIndex: Int) -> Int? {
-            guard let word = wordSpan(containing: sourceRange)?.lowerBound,
+        func sentenceWordIndex(forWord word: Int, sentenceIndex: Int) -> Int? {
+            guard
                 let firstWord = firstRangeOverlapping(
                     sentenceRanges[sentenceIndex], in: displayWordRanges)
             else { return nil }
@@ -424,7 +424,7 @@ nonisolated enum ContextualPronunciationDiscovery {
                     deterministicRuleID: analysis.ruleID,
                     deterministicStrength: analysis.strength,
                     targetSentenceWordIndex: sourceSnapshot.sentenceWordIndex(
-                        for: token.range, sentenceIndex: sentenceIndex)))
+                        forWord: wordSpan.lowerBound, sentenceIndex: sentenceIndex)))
         }
         return occurrences
     }

@@ -109,7 +109,7 @@ nonisolated enum HomographPronunciationResolver {
     ]
     private static let recordVerbPreceders: Set<String> = [
         "can", "could", "may", "might", "must", "please", "shall", "should", "to", "will",
-        "would",
+        "would", "i", "we", "you", "they",
     ]
     private static let recordVerbWhObjectFollowers: Set<String> = [
         "what", "whatever",
@@ -404,8 +404,12 @@ nonisolated enum HomographPronunciationResolver {
                 subject = previousLowercased(tokens, subjectCursor)
             }
             let nounSubject = ["there", "here", "this", "that"].contains(subject ?? "")
-            if !nounSubject,
-                next.isEmpty || next.contains(where: contentSatisfiedFollowers.contains)
+            let personalSubject = ["i", "you", "we", "they", "he", "she"].contains(subject ?? "")
+            let satisfiedFollower = next.contains(where: contentSatisfiedFollowers.contains)
+            // Do not defeat the quantity noun on an uncertain subject, e.g.
+            // "There will also be more content" or "The answer is more content".
+            if !nounSubject, personalSubject || (skipped == 0 && satisfiedFollower),
+                next.isEmpty || satisfiedFollower
             {
                 return Resolution(
                     ipa: IPA.contentSatisfied,
@@ -646,7 +650,7 @@ nonisolated enum HomographPronunciationResolver {
         let precederIsVerbSignal: Bool = {
             guard index > tokens.startIndex, !tokens[index].startsSentence else { return false }
             let preceder = tokens[tokens.index(before: index)]
-            if preceder.lowercased == "to" { return true }
+            if ["to", "i", "we", "you", "they"].contains(preceder.lowercased) { return true }
             return recordVerbPreceders.contains(preceder.lowercased) && !preceder.startsSentence
         }()
 
