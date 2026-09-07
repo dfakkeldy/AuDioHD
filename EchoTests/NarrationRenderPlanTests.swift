@@ -1573,7 +1573,7 @@ import Testing
     }
 
     @Test func sharedOccurrenceIdentityMatchesTheLockedDiscoveryVector() throws {
-        let expected = "de44ec502ca7aa3078c8822dd0964de52126c4e060f3178e3134a4f883a6d672"
+        let expected = "ed3e920bcc956ebe419bfd4894cbc424262293101d20b8e8762aa66815e6f0d8"
         let discovered = try #require(
             ContextualPronunciationDiscovery.discover(
                 text: "read",

@@ -65,25 +65,30 @@
         /// pinning intra-op parallelism to them is the throughput lever measured on
         /// device. Injectable so the on-device spike can compare 1/2/4.
         private let intraOpThreads: Int32
+        private let generateWordTimings: Bool
 
         /// Test seam: surface the configured thread count without exposing internals.
         var intraOpThreadsForTesting: Int32 { intraOpThreads }
 
-        init(intraOpThreads: Int32 = 2) {
+        init(intraOpThreads: Int32 = 2, generateWordTimings: Bool = true) {
             self.modelProvider = { progress in try await Self.ensureModel(progress: progress) }
             self.intraOpThreads = intraOpThreads
+            self.generateWordTimings = generateWordTimings
         }
 
         /// Test seam: inject a custom model provider (e.g. one that throws) to drive
         /// the no-cache-on-failure retry path.
         init(
-            modelProvider: @escaping @Sendable (
-                @Sendable (NarrationPrepareProgress) -> Void
-            ) async throws -> URL,
-            intraOpThreads: Int32 = 2
+            modelProvider:
+                @escaping @Sendable (
+                    @Sendable (NarrationPrepareProgress) -> Void
+                ) async throws -> URL,
+            intraOpThreads: Int32 = 2,
+            generateWordTimings: Bool = true
         ) {
             self.modelProvider = modelProvider
             self.intraOpThreads = intraOpThreads
+            self.generateWordTimings = generateWordTimings
         }
 
         // MARK: - Model location
@@ -163,7 +168,8 @@
             fan.add(progress)
             progressFanOut = fan
             let generation = lifecycleGeneration
-            let task = Task<Void, Error> { [logger, modelProvider, intraOpThreads, generation] in
+            let task = Task<Void, Error> {
+                [logger, modelProvider, intraOpThreads, generation, generateWordTimings] in
                 defer { fan.clear() }
                 let modelURL = try await modelProvider { fan.emit($0) }
                 // A concurrent unload() during the await above bumped
@@ -191,8 +197,9 @@
                 // exact word timings. Its absence or a load error is non-fatal — it
                 // only disables timing (callers fall back to interpolation).
                 var durationSession: ORTSession?
-                if let headURL = NarrationResources.url(
-                    forResource: Self.durationHeadResource, withExtension: "onnx")
+                if generateWordTimings,
+                    let headURL = NarrationResources.url(
+                        forResource: Self.durationHeadResource, withExtension: "onnx")
                 {
                     do {
                         let headOptions = try ORTSessionOptions()
@@ -205,7 +212,7 @@
                             "Duration head load failed (word timing disabled): \(error.localizedDescription, privacy: .public)"
                         )
                     }
-                } else {
+                } else if generateWordTimings {
                     logger.warning("Duration head resource not bundled (word timing disabled).")
                 }
                 self.store(
@@ -251,6 +258,7 @@
             // waveform (digital silence) for a non-empty input. Every speed retry
             // reuses the immutable planned ids; text splitting and re-planning belong
             // to NarrationService so approved pronunciation choices stay intact.
+            let waveformStart = ContinuousClock.now
             let samples = try await NarrationSilenceGuard.synthesizeWithSpeedNudge(
                 speeds: Self.silenceRecoverySpeeds
             ) { speed in
@@ -258,6 +266,8 @@
                     ids32: inputs.waveformIDs, refS: inputs.refS, speed: speed)
             }
             let audioS = Double(samples.count) / 24_000
+            let waveformTime = waveformStart.duration(to: .now)
+            let timingStart = ContinuousClock.now
 
             // Word timings from the duration head use the exact same planned ids.
             // The plan's display-text word count, rather than pronunciation markup,
@@ -271,6 +281,10 @@
                     wordGroupCounts: inputs.wordGroupCounts,
                     sampleCount: samples.count, sampleRate: 24_000)
             }
+            let timingTime = timingStart.duration(to: .now)
+            logger.debug(
+                "Synthesis stages: waveform=\(String(describing: waveformTime), privacy: .public), wordTiming=\(String(describing: timingTime), privacy: .public), phonemes=\(planned.phonemeIDs.count, privacy: .public)"
+            )
             return TTSChunk(
                 samples: samples,
                 sampleRate: 24_000,
@@ -480,6 +494,8 @@
         var isPreparedForTesting: Bool {
             session != nil
         }
+
+        var isWordTimingPreparedForTesting: Bool { durationSession != nil }
 
         /// Builds the shared run options. "cpu:0" names the CPU EP's default
         /// device arena — ORT shrinks it at the end of each Run() carrying this key.

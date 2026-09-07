@@ -126,7 +126,7 @@ import Testing
         #expect(exact.kokoroTokenIDs == original.kokoroTokenIDs)
         #expect(exact.source == original.source)
         #expect(exact.ruleID == original.ruleID)
-        #expect(NarrationFileNaming.renderVersion == 24)
+        #expect(NarrationFileNaming.renderVersion == 25)
 
         let canonicalizedIPA = PronunciationCandidateAnalyzer.attachingNeuralShadowResult(
             .candidate(candidate(id: Self.exactCandidateID, ipa: "  zizkwf\n")),

@@ -6,6 +6,20 @@
     @testable import Echo
 
     struct OnnxKokoroEngineLifecycleTests {
+        @Test func waveformOnlyPreparationDoesNotLoadDurationSession() async throws {
+            let url = try #require(
+                NarrationResources.url(
+                    forResource: "kokoro_dur_head", withExtension: "onnx"))
+            for enabled in [false, true] {
+                let engine = OnnxKokoroEngine(
+                    modelProvider: { _ in url }, intraOpThreads: 1, generateWordTimings: enabled)
+                try await engine.prepare()
+                #expect(await engine.isPreparedForTesting)
+                #expect(await engine.isWordTimingPreparedForTesting == enabled)
+                await engine.unload()
+            }
+        }
+
         /// unload() releases the sessions; a later prepare() re-creates them.
         /// Uses the small bundled duration-head onnx as the "model" via the
         /// modelProvider seam so no 163 MB download is involved.

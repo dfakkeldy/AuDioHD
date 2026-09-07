@@ -4,6 +4,36 @@ import Testing
 @testable import Echo
 
 @Suite struct TextNormalizerTests {
+    @Test func modelNormalizationOnlySplitsExactIdentifierOccurrences() {
+        let text = "Use PCalc, not AudioPlayer."
+        let result = FMNormalizer.applying(
+            [
+                .init(wordIndex: 1, source: "PCalc,", spoken: "P Calc,"),
+                .init(wordIndex: 3, source: "AudioPlayer.", spoken: "Audio Player."),
+            ], to: text)
+        #expect(result == "Use P Calc, not Audio Player.")
+    }
+
+    @Test func modelNormalizationProtectsAuthoredPronunciations() {
+        let text = "Use [PCalc](/pˈi/) now."
+        #expect(
+            FMNormalizer.applying(
+                [
+                    .init(wordIndex: 1, source: "[PCalc](/pˈi/)", spoken: "[P Calc](/pˈi/)")
+                ], to: text) == text)
+    }
+
+    @Test func modelNormalizationRejectsMeaningChangesAndWrongAddresses() {
+        let text = "Do not use PCalc."
+        for substitutions: [FMNormalizer.Substitution] in [
+            [.init(wordIndex: 1, source: "not", spoken: "")],
+            [.init(wordIndex: 3, source: "PCalc.", spoken: "Calculator.")],
+            [.init(wordIndex: 2, source: "PCalc.", spoken: "P Calc.")],
+        ] {
+            #expect(FMNormalizer.applying(substitutions, to: text) == text)
+        }
+    }
+
     @Test(arguments: [
         ("Dr. Smith arrived.", "Doctor Smith arrived."),
         ("St. Mary on St. James St.", "Saint Mary on Saint James Street."),

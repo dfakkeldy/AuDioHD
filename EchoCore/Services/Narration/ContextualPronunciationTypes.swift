@@ -28,14 +28,17 @@ nonisolated struct ContextualPronunciationOccurrence: Codable, Equatable, Sendab
     let wordStart: Int
     let wordEnd: Int
     let targetWord: String
-    let precedingSentence: String?
+    var precedingSentence: String?
     let targetSentence: String
-    let followingSentence: String?
+    var followingSentence: String?
     let familyID: String
     let candidates: [ContextualPronunciationCandidate]
     let deterministicCandidateID: String?
     let deterministicRuleID: String?
     let deterministicStrength: DeterministicRuleStrength
+    /// Index in the display sentence, not in the block or pronunciation markup.
+    /// Optional for decoding older discovery fixtures.
+    var targetSentenceWordIndex: Int? = nil
 }
 
 nonisolated struct ContextualPronunciationKey: Hashable, Sendable {
@@ -66,6 +69,7 @@ nonisolated enum ContextualPronunciationOccurrenceID {
 
 nonisolated enum ContextualModelAvailability: String, Codable, Equatable, Sendable {
     case available
+    case notRequested
     case unsupportedOS
     case deviceNotEligible
     case appleIntelligenceNotEnabled
@@ -225,6 +229,10 @@ nonisolated enum ContextualPronunciationEvidenceValidator {
         }
 
         switch evidence.acceptanceReason {
+        case .shadowNotRequested:
+            return evidence.modelAvailability == .notRequested
+                && evidence.modelFailure == nil && evidence.modelCandidateID == nil
+                && !evidence.modelAbstained
         case .shadowObserved:
             return evidence.modelAvailability == .available
                 && evidence.modelFailure == nil
@@ -285,6 +293,7 @@ nonisolated enum ContextualPronunciationEvidenceValidator {
 }
 
 nonisolated enum ContextualAcceptanceReason: String, Codable, Equatable, Sendable {
+    case shadowNotRequested
     case shadowObserved
     case shadowNeedsReview
     case shadowModelUnavailable

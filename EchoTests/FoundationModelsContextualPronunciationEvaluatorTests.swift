@@ -78,6 +78,17 @@ private nonisolated enum ContextualEvaluatorFixtures {
 }
 
 @Suite struct FoundationModelsContextualPronunciationEvaluatorTests {
+    @Test func repeatedSpellingMarksEachExactOccurrence() throws {
+        let occurrences = ContextualPronunciationDiscovery.discover(
+            text: "We record the record.", blockID: "mixed")
+        #expect(occurrences.count == 2)
+        let prompts = occurrences.map {
+            FoundationModelsContextualPronunciationEvaluator.prompt(for: .init(occurrences: [$0]))
+        }
+        #expect(prompts[0].contains("We <target>record</target> the record."))
+        #expect(prompts[1].contains("We record the <target>record.</target>"))
+    }
+
     @Test func promptContainsOnlyApprovedContextAndOpaqueChoices() {
         let prompt = FoundationModelsContextualPronunciationEvaluator.prompt(
             for: ContextualEvaluatorFixtures.request)

@@ -109,7 +109,7 @@ nonisolated enum HomographPronunciationResolver {
     ]
     private static let recordVerbPreceders: Set<String> = [
         "can", "could", "may", "might", "must", "please", "shall", "should", "to", "will",
-        "would",
+        "would", "i", "we", "you", "they",
     ]
     private static let recordVerbWhObjectFollowers: Set<String> = [
         "what", "whatever",
@@ -375,6 +375,51 @@ nonisolated enum HomographPronunciationResolver {
         let previous = previousLowercased(tokens, index)
         let next = nextLowercased(tokens, index, limit: 1)
 
+        // Resolve a linking verb through a bounded run of degree/negation
+        // modifiers before the quantity rule for "more content" can win.
+        // Existential "there is more content" remains a material noun.
+        let modifiers: Set<String> = [
+            "more", "less", "quite", "very", "perfectly", "entirely",
+            "fully", "completely", "not", "never", "still", "always", "so", "rather",
+        ]
+        var cursor = index
+        var skipped = 0
+        while cursor > tokens.startIndex, !tokens[cursor].startsSentence, skipped < 3,
+            modifiers.contains(tokens[cursor - 1].lowercased)
+        {
+            cursor -= 1
+            skipped += 1
+        }
+        if let linkingVerb = previousLowercased(tokens, cursor),
+            contentAdjectivePreceders.contains(linkingVerb)
+        {
+            let auxiliaries: Set<String> = [
+                "will", "would", "can", "could", "may", "might",
+                "shall", "should", "must", "has", "have", "had", "not", "never", "always", "still",
+            ]
+            var subjectCursor = cursor - 1
+            var subject = previousLowercased(tokens, subjectCursor)
+            while subjectCursor > 0, let word = subject, auxiliaries.contains(word) {
+                subjectCursor -= 1
+                subject = previousLowercased(tokens, subjectCursor)
+            }
+            let nounSubject = ["there", "here", "this", "that"].contains(subject ?? "")
+            let personalSubject = ["i", "you", "we", "they", "he", "she"].contains(subject ?? "")
+            let satisfiedFollower = next.contains(where: contentSatisfiedFollowers.contains)
+            // Do not defeat the quantity noun on an uncertain subject, e.g.
+            // "There will also be more content" or "The answer is more content".
+            if !nounSubject, personalSubject || (skipped == 0 && satisfiedFollower),
+                next.isEmpty || satisfiedFollower
+            {
+                return Resolution(
+                    ipa: IPA.contentSatisfied,
+                    ruleID: "homograph.content.adjective.copula",
+                    rationale:
+                        "Satisfied-adjective pronunciation selected after a linking verb and optional modifiers."
+                )
+            }
+        }
+
         // A noun preceder ("the content", "audio content") wins outright, even
         // when a "to"/"with" follows: "Add content to the page." is the noun.
         if let cue = previous, contentNounPreceders.contains(cue) {
@@ -382,21 +427,6 @@ nonisolated enum HomographPronunciationResolver {
                 ipa: IPA.contentNoun,
                 ruleID: "homograph.content.noun.preceder",
                 rationale: "Noun pronunciation selected after “\(cue)”.")
-        }
-
-        // The "satisfied" adjective ("I am content with this narration") only
-        // applies when a copula/linking verb precedes *and* a "to"/"with"
-        // follows. A following "to"/"with" alone no longer flips the noun.
-        if let previous,
-            contentAdjectivePreceders.contains(previous),
-            let follower = next.first(where: contentSatisfiedFollowers.contains)
-        {
-            return Resolution(
-                ipa: IPA.contentSatisfied,
-                ruleID: "homograph.content.adjective.copula",
-                rationale:
-                    "Satisfied-adjective pronunciation selected after “\(previous)” before “\(follower)”."
-            )
         }
 
         if let cue = next.first(where: contentNounFollowers.contains) {
@@ -597,6 +627,13 @@ nonisolated enum HomographPronunciationResolver {
     private static func recordResolution(at index: Int, tokens: [Token]) -> Resolution? {
         let previous = previousLowercased(tokens, index)
 
+        // The new personal-subject shortcut is for ordinary prose. Preserve
+        // abstention for emphatic capitals and potential named uses.
+        if ["i", "we", "you", "they"].contains(previous ?? ""),
+            tokens[index].text != tokens[index].lowercased {
+            return nil
+        }
+
         // The attributive compound-noun guard ("record sales", "record labels")
         // only applies to a follower in the *same* sentence. Word tokenization
         // ignores punctuation, so without this a period between clauses
@@ -620,7 +657,7 @@ nonisolated enum HomographPronunciationResolver {
         let precederIsVerbSignal: Bool = {
             guard index > tokens.startIndex, !tokens[index].startsSentence else { return false }
             let preceder = tokens[tokens.index(before: index)]
-            if preceder.lowercased == "to" { return true }
+            if ["to", "i", "we", "you", "they"].contains(preceder.lowercased) { return true }
             return recordVerbPreceders.contains(preceder.lowercased) && !preceder.startsSentence
         }()
 

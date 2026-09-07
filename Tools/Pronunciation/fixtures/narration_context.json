@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "description": "Synthetic listening regression cases. Expected senses are authored targets, not evidence of model or listening qualification.",
+  "chapters": [
+    {
+      "title": "Words with two meanings",
+      "paragraphs": [
+        {"text": "We record the record. Please record what happened, then check the record.", "focus": "record: verb, noun, verb, noun"},
+        {"text": "She was more content with her life. The app has more content with images.", "focus": "content: satisfied, material"},
+        {"text": "I am content. The content is useful. They are not content with the answer.", "focus": "content: satisfied, material, satisfied"},
+        {"text": "They live near the studio where we broadcast live. Their lives changed when the show began.", "focus": "live: reside, broadcast; lives: existences"},
+        {"text": "Yesterday I read the report. Every morning I read the newspaper.", "focus": "read: past, present"}
+      ]
+    },
+    {
+      "title": "Paragraph context and dialogue",
+      "paragraphs": [
+        {"text": "Yesterday we visited the library.", "focus": "past-tense context for next paragraph"},
+        {"text": "I read the record.", "focus": "read: past; record: noun"},
+        {"text": "Then we returned home.", "focus": "following context"},
+        {"text": "\u201cRecord the result,\u201d she said. \u201cThat record belongs in the archive.\u201d", "focus": "imperative verb and noun in dialogue"},
+        {"text": "\u201cAre you content with the content?\u201d asked Maya.", "focus": "satisfied and material in one sentence; proper name"}
+      ]
+    },
+    {
+      "title": "Identifiers and sentence boundaries",
+      "paragraphs": [
+        {"text": "Use PCalc, not AudioPlayer. The NSURL identifier appears in the example.", "focus": "identifier splits must preserve negation"},
+        {"text": "The record label released a live recording. We will record sales tomorrow.", "focus": "attributive noun versus verb"},
+        {"text": "She felt quite content. There is more content in the next chapter.", "focus": "linking verb versus existential quantity"},
+        {"text": "The archivist checked the record, compared it with the earlier account, asked the author to clarify the ambiguous passage, and finally decided that the original wording should remain exactly as it was, because a small change in emphasis could change what a listener understood about the sequence of events and the reasons for the decision.", "focus": "long-sentence chunk seams, pauses, and emphasis"}
+      ]
+    }
+  ]
+}

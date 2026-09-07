@@ -6,18 +6,19 @@ import Testing
 
 @Suite struct NarrationFileNamingTests {
     @Test func renderVersionRegeneratesCachesForAtomicQualityRetry() {
-        // v24 retags sentence-initial imperative heteronyms as verbs before
+        // v25 changes contextual content pronunciation and identifier normalization.
+        // Earlier versions retagged sentence-initial imperative heteronyms as verbs before
         // lexicon lookup, so v23 audio and pronunciation evidence may not be
         // reused.
-        #expect(NarrationFileNaming.renderVersion == 24)
+        #expect(NarrationFileNaming.renderVersion == 25)
         let current = NarrationFileNaming.chapterFileName(
             audiobookID: "book",
             chapterIndex: 0,
             voice: VoiceID("af_heart"),
             contentSignature: "0123456789abcdef")
-        let previous = current.replacing("-v24.m4a", with: "-v23.m4a")
+        let previous = current.replacing("-v25.m4a", with: "-v24.m4a")
 
-        #expect(current.hasSuffix("-v24.m4a"))
+        #expect(current.hasSuffix("-v25.m4a"))
         #expect(
             NarrationFileNaming.isCurrentChapterCacheFileName(
                 current,
@@ -62,12 +63,12 @@ import Testing
             NarrationFileNaming.chapterFileName(
                 audiobookID: "book", chapterIndex: 3, voice: voice,
                 contentSignature: "abc")
-                == "book-ch3-habc-af_heart-v24.m4a")
+                == "book-ch3-habc-af_heart-v25.m4a")
         #expect(
             NarrationFileNaming.segmentFileName(
                 audiobookID: "book", chapterIndex: 3, segmentIndex: 2,
                 voice: voice, contentSignature: "abc")
-                == "book-ch3-s2-habc-af_heart-v24.m4a")
+                == "book-ch3-s2-habc-af_heart-v25.m4a")
         #expect(
             NarrationFileNaming.location(fromFileName: "book-ch3-s2-habc-af_heart-v22.m4a")
                 == NarrationCacheLocation(
@@ -110,21 +111,43 @@ import Testing
                 fromFileName:
                     "book-ck0123456789abcdef0123456789abcdef-s0-af_heart-v\(NarrationFileNaming.renderVersion - 1).m4a"
             ) == nil)
-        #expect(NarrationFileNaming.location(fromFileName: "\(stablePrefix)-ch4-af_heart-v22.m4a") == nil)
-        #expect(NarrationFileNaming.location(fromFileName: "\(stablePrefix)--ch-af_heart-v22.m4a") == nil)
-        #expect(NarrationFileNaming.location(fromFileName: "\(stablePrefix)-s0-s1-af_heart-v22.m4a") == nil)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "\(stablePrefix)-ch4-af_heart-v22.m4a")
+                == nil)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "\(stablePrefix)--ch-af_heart-v22.m4a")
+                == nil)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "\(stablePrefix)-s0-s1-af_heart-v22.m4a")
+                == nil)
         #expect(NarrationFileNaming.location(fromFileName: "book-ch3-s-af_heart-v22.m4a") == nil)
         #expect(NarrationFileNaming.location(fromFileName: "book-ch3-ch4-af_heart-v22.m4a") == nil)
         #expect(NarrationFileNaming.location(fromFileName: "book-ch3--ch-af_heart-v22.m4a") == nil)
-        #expect(NarrationFileNaming.location(fromFileName: "book-ch3-s0-s1-af_heart-v22.m4a") == nil)
-        #expect(NarrationFileNaming.location(fromFileName: "book-ch3-plan-0123456789-v22.m4a") == nil)
-        #expect(NarrationFileNaming.location(fromFileName: "book-ch3-plan-0123456789ag-v22.m4a") == nil)
-        #expect(NarrationFileNaming.location(fromFileName: "\(stablePrefix)-plan-0123456789-v22.m4a") == nil)
-        #expect(NarrationFileNaming.location(fromFileName: "\(stablePrefix)-plan-0123456789ag-v22.m4a") == nil)
-        #expect(NarrationFileNaming.location(fromFileName: "book-ch3-af_heart-v22.m4a")?.chapterIndex == 3)
-        #expect(NarrationFileNaming.location(fromFileName: "book-ch3-plan-0123456789ab-v22.m4a")?.chapterIndex == 3)
-        #expect(NarrationFileNaming.location(fromFileName: "book-ck0123456789abcdef0123456789abcdef-af_heart-v24.m4a")?.stableChapterToken != nil)
-        #expect(NarrationFileNaming.location(fromFileName: "\(stablePrefix)-plan-0123456789ab-v24.m4a")?.stableChapterToken != nil)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "book-ch3-s0-s1-af_heart-v22.m4a") == nil)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "book-ch3-plan-0123456789-v22.m4a") == nil)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "book-ch3-plan-0123456789ag-v22.m4a") == nil)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "\(stablePrefix)-plan-0123456789-v22.m4a")
+                == nil)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "\(stablePrefix)-plan-0123456789ag-v22.m4a")
+                == nil)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "book-ch3-af_heart-v22.m4a")?.chapterIndex
+                == 3)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "book-ch3-plan-0123456789ab-v22.m4a")?
+                .chapterIndex == 3)
+        #expect(
+            NarrationFileNaming.location(
+                fromFileName: "book-ck0123456789abcdef0123456789abcdef-af_heart-v25.m4a")?
+                .stableChapterToken != nil)
+        #expect(
+            NarrationFileNaming.location(fromFileName: "\(stablePrefix)-plan-0123456789ab-v25.m4a")?
+                .stableChapterToken != nil)
     }
 
     @Test func contentSignatureChangesWithRenderedTextBlockIdentityAndRenderParameters() {
@@ -403,7 +426,8 @@ import Testing
                     audiobookID: "book",
                     chapterIndex: 0,
                     voice: VoiceID("af_heart"),
-                    contentSignature: signature))
+                    contentSignature: signature)
+            )
         }
 
         #expect(audit.auditPackVersion != EnglishPronunciationAuditPack.empty.auditPackVersion)

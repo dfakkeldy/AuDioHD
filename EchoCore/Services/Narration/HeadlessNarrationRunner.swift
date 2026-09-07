@@ -45,6 +45,8 @@ struct NarrationRunConfig {
     /// Headless batch renders default to deterministic text normalization so the
     /// CLI never waits on optional Foundation Models availability.
     var enableFMNormalization: Bool = false
+    /// Explicit offline qualification only. Shadow choices do not change audio.
+    var enableContextualPronunciationAudit: Bool = false
     /// When `true` (the default), the sidecar's anchors carry per-word timings
     /// read back from the run database's synthesis-time `word_timing` rows.
     /// `false` (the CLI's `--no-word-timings`) writes block anchors only.
@@ -562,10 +564,12 @@ struct NarrationRunResult {
         }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        return String(decoding: try encoder.encode(Identity(
-            blockCount: plan.blocks.count, defaultVoice: plan.defaultVoice.rawValue,
-            sourceEPUBSHA256: plan.sourceEPUBSHA256, voicePlanID: plan.voicePlanID,
-            voicePlanSHA256: plan.voicePlanSHA256)), as: UTF8.self)
+        return String(
+            decoding: try encoder.encode(
+                Identity(
+                    blockCount: plan.blocks.count, defaultVoice: plan.defaultVoice.rawValue,
+                    sourceEPUBSHA256: plan.sourceEPUBSHA256, voicePlanID: plan.voicePlanID,
+                    voicePlanSHA256: plan.voicePlanSHA256)), as: UTF8.self)
     }
 
     static func resolverArchiveDestination(entryPath: String, temporaryRoot: URL) throws -> URL {
@@ -598,7 +602,8 @@ struct NarrationRunResult {
 
         let temporaryRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
             "EchoVoicePlan-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: temporaryRoot, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: temporaryRoot) }
         let archive = try Archive(url: epubURL, accessMode: .read)
         for entry in archive where entry.type == .file {
@@ -904,16 +909,18 @@ struct NarrationRunResult {
         var previousExactDecisionStart: TimeInterval = 0
         var previousBlockFallbackDecisionStart: TimeInterval = 0
         for decision in capture.pronunciationEvidence?.decisions ?? [] {
-            let hasValidLocation = decision.wordStart >= 0
+            let hasValidLocation =
+                decision.wordStart >= 0
                 && decision.wordEnd >= decision.wordStart
                 && !decision.normalizedWord.isEmpty
                 && decision.bookRelativeAudioRange == nil
-            let hasValidOrdinaryEvidence = !decision.selectedIPA.isEmpty
+            let hasValidOrdinaryEvidence =
+                !decision.selectedIPA.isEmpty
                 && !decision.kokoroTokenIDs.isEmpty
                 && (decision.chapterRelativeAudioRange == nil)
                     == (decision.timingPrecision == nil)
             guard hasValidLocation,
-                (hasValidOrdinaryEvidence || decision.isEvidenceOnlyInvalidOutputAdvisory)
+                hasValidOrdinaryEvidence || decision.isEvidenceOnlyInvalidOutputAdvisory
             else {
                 throw NarrationRunError.captureIdentity(
                     "capture pronunciation decision is semantically invalid")
@@ -1174,7 +1181,8 @@ struct NarrationRunResult {
         case .modelCacheHit:
             return 0.9
         case .downloadingModel(let receivedBytes, let totalBytes):
-            let fraction = totalBytes > 0
+            let fraction =
+                totalBytes > 0
                 ? min(max(Double(receivedBytes) / Double(totalBytes), 0), 1)
                 : 0
             return 0.9 * fraction
@@ -1320,9 +1328,10 @@ struct NarrationRunResult {
         pronunciationPackLoader: @escaping @Sendable () async -> EnglishPronunciationPack = {
             await EnglishPronunciationPack.bundledOrEmpty()
         },
-        pronunciationAuditPackLoader: @escaping @Sendable () async -> EnglishPronunciationAuditPack = {
-            await EnglishPronunciationAuditPack.bundledOrEmpty()
-        },
+        pronunciationAuditPackLoader:
+            @escaping @Sendable () async -> EnglishPronunciationAuditPack = {
+                await EnglishPronunciationAuditPack.bundledOrEmpty()
+            },
         reviewGenerator:
             @escaping @MainActor (PronunciationReviewRequest) async throws ->
             PronunciationReviewOutcome = { request in
@@ -1336,10 +1345,12 @@ struct NarrationRunResult {
         let source = try resolveNarrationSource(at: config.epubURL)
         if config.voicePlanURL != nil {
             guard case .epubFile = source else {
-                throw NarrationRunError.voicePlan("--voice-plan requires an EPUB file, not a PDF or directory source")
+                throw NarrationRunError.voicePlan(
+                    "--voice-plan requires an EPUB file, not a PDF or directory source")
             }
             guard config.chapterVoicesByDisplayNumber.isEmpty else {
-                throw NarrationRunError.voicePlan("--voice-plan cannot be combined with --chapter-voice")
+                throw NarrationRunError.voicePlan(
+                    "--voice-plan cannot be combined with --chapter-voice")
             }
         }
         let runLease = try Self.acquireRunLease(for: config)
@@ -1408,7 +1419,8 @@ struct NarrationRunResult {
                 try Self.validateVoiceResources(plan)
                 if let explicitVoice = config.voice, explicitVoice != plan.defaultVoice {
                     throw NarrationRunError.voicePlan(
-                        "--voice \(explicitVoice.rawValue) conflicts with plan default \(plan.defaultVoice.rawValue)")
+                        "--voice \(explicitVoice.rawValue) conflicts with plan default \(plan.defaultVoice.rawValue)"
+                    )
                 }
                 resolvedVoicePlan = plan
                 voiceByChapterIndex = Dictionary(
@@ -1523,7 +1535,8 @@ struct NarrationRunResult {
         let expectedCaptureByChapterIndex = Dictionary(
             uniqueKeysWithValues: chapterIndices.map { chapterIndex in
                 let signature = chapterContentSignatures[chapterIndex]!
-                let chapterVoice = voiceByChapterIndex[chapterIndex] ?? Self.legacyDefaultVoice(for: config)
+                let chapterVoice =
+                    voiceByChapterIndex[chapterIndex] ?? Self.legacyDefaultVoice(for: config)
                 let renderIdentityToken = resolvedVoicePlan?.voicePlanID ?? chapterVoice.rawValue
                 let audioFileName = NarrationFileNaming.chapterFileName(
                     audiobookID: audiobookID,
@@ -1591,7 +1604,10 @@ struct NarrationRunResult {
         } else if let tts {
             makeEngine = { tts }
         } else {
-            makeEngine = { NarrationEngineFactory.make(intraOpThreads: resolvedThreads) }
+            makeEngine = {
+                NarrationEngineFactory.make(
+                    intraOpThreads: resolvedThreads, generateWordTimings: config.includeWordTimings)
+            }
         }
 
         let engines = batch.isEmpty ? [] : (0..<workers).map { _ in makeEngine() }
@@ -1714,6 +1730,9 @@ struct NarrationRunResult {
                         pronunciationOccurrenceOverrides: { occurrenceOverrides },
                         pronunciationPack: pronunciationPack,
                         pronunciationAuditPack: pronunciationAuditPack,
+                        contextualPronunciationEvaluator: config.enableContextualPronunciationAudit
+                            ? FoundationModelsContextualPronunciationEvaluator.makeBatchEvaluator()
+                            : FoundationModelsContextualPronunciationEvaluator.notRequestedEvaluator(),
                         neuralEvaluator: resolvedNeuralEvaluator,
                         fmEnabled: { config.enableFMNormalization })
                     while cursor.next < batch.count {

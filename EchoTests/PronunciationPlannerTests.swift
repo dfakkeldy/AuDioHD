@@ -4,6 +4,23 @@ import Testing
 @testable import Echo
 
 @Suite struct PronunciationPlannerTests {
+    @Test func sizingAndPlanningReuseTheSameG2PResult() throws {
+        var calls = 0
+        let g2p = KokoroG2P()
+        let planner = try PronunciationPlanner(g2pResult: { input, display in
+            calls += 1
+            return g2p.result(for: input, displayText: display)
+        })
+        let text = "We record the record."
+        let count = planner.phonemeCount(for: text)
+        let plan = try planner.planResolved(text)
+        #expect(count == plan.phonemes.count)
+        #expect(calls == 1)
+        let differentDisplay = try planner.plan(displayText: "Different words", g2pInputText: text)
+        #expect(differentDisplay.displayText == "Different words")
+        #expect(calls == 2)
+    }
+
     @Test func planCapturesExactResolvedInputsAndFallbackEvidence() throws {
         let plan = try PronunciationPlanner().plan(
             displayText: "The filesystem works.",
@@ -66,10 +83,11 @@ import Testing
 
         try #require(slices.count > 1)
         #expect(slices.allSatisfy { !$0.phonemes.isEmpty })
-        #expect(slices.allSatisfy {
-            $0.phonemeIDs.first == KokoroPhonemeVocab.boundaryTokenId
-                && $0.phonemeIDs.last == KokoroPhonemeVocab.boundaryTokenId
-        })
+        #expect(
+            slices.allSatisfy {
+                $0.phonemeIDs.first == KokoroPhonemeVocab.boundaryTokenId
+                    && $0.phonemeIDs.last == KokoroPhonemeVocab.boundaryTokenId
+            })
         #expect(slices.map(\.phonemes).joined() == parent.phonemes)
         #expect(
             slices.flatMap { $0.phonemeIDs.dropFirst().dropLast() }
@@ -117,7 +135,8 @@ import Testing
                 #expect(evidence.rating == parentEvidence.rating)
                 #expect(evidence.usedFallback == parentEvidence.usedFallback)
                 #expect(
-                    (displayRange.lowerBound + displayOffset)..<(displayRange.upperBound + displayOffset)
+                    (displayRange.lowerBound + displayOffset)..<(displayRange.upperBound
+                        + displayOffset)
                         == parentEvidence.displayCharacterRange)
                 let parentPhonemeRange = try #require(parentEvidence.phonemeCharacterRange)
                 #expect(
@@ -141,14 +160,15 @@ import Testing
             }
             #expect(matchingSlices.count == 1)
             let matchingSlice = try #require(matchingSlices.first)
-            #expect(matchingSlice.pronunciationTokenEvidence.contains { evidence in
-                evidence.usedFallback
-                    && evidence.text.lowercased() == fallbackWord
-                    && matchingSlice.pronunciationFallbackHits.contains { hit in
-                        hit.word.lowercased() == fallbackWord
-                            && hit.ipa == evidence.selectedPhonemes
-                    }
-            })
+            #expect(
+                matchingSlice.pronunciationTokenEvidence.contains { evidence in
+                    evidence.usedFallback
+                        && evidence.text.lowercased() == fallbackWord
+                        && matchingSlice.pronunciationFallbackHits.contains { hit in
+                            hit.word.lowercased() == fallbackWord
+                                && hit.ipa == evidence.selectedPhonemes
+                        }
+                })
         }
     }
 
@@ -159,10 +179,12 @@ import Testing
         }
         let cases = [
             BoundaryCase(
-                text: "One brief sentence ends here. Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu.",
+                text:
+                    "One brief sentence ends here. Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu.",
                 expectedFirstSlice: "One brief sentence ends here."),
             BoundaryCase(
-                text: "Alpha beta gamma, delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron.",
+                text:
+                    "Alpha beta gamma, delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron.",
                 expectedFirstSlice: "Alpha beta gamma,"),
         ]
 

@@ -398,7 +398,9 @@ nonisolated enum ContextualPronunciationPreflight {
             })?.candidateID
             let abstained = selection == .needsReview
             let acceptanceReason: ContextualAcceptanceReason
-            if result.availability != .available {
+            if result.availability == .notRequested {
+                acceptanceReason = .shadowNotRequested
+            } else if result.availability != .available {
                 acceptanceReason = .shadowModelUnavailable
             } else if result.failure != nil {
                 acceptanceReason = .shadowModelFailure

@@ -1227,7 +1227,7 @@ nonisolated enum PronunciationWatchVocabulary {
         "verified",
     ]
 
-    @MainActor static let words: Set<String> = {
+    static let words: Set<String> = {
         let builtIns = PronunciationOverrides.builtInDefaults.keys.map {
             PronunciationAuditContext.normalizedWord($0)
         }
@@ -1372,7 +1372,7 @@ nonisolated enum PronunciationAuditContext {
         return first...last
     }
 
-    @MainActor static func decisionSeed(
+    static func decisionSeed(
         for evidence: PronunciationTokenEvidence,
         blockID: String,
         chunkDisplayText: String,
