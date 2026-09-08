@@ -279,7 +279,7 @@ jobs:
         env:
           # Public fixture only. Keep a real import-to-ONNX proof alongside the
           # fast recording-engine tests; the local test remains opt-in.
-          SIMCTL_CHILD_ECHO_EPUB_LISTENING_OUTPUT: ${{ runner.temp }}/epub-pronunciation-proof
+          TEST_RUNNER_ECHO_EPUB_LISTENING_OUTPUT: ${{ runner.temp }}/epub-pronunciation-proof
         run: |
           set -o pipefail
           rm -rf TestResults.xcresult
@@ -299,7 +299,7 @@ jobs:
           name: EPUBPronunciationProof-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/epub-pronunciation-proof
           retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Upload test result bundle
         if: failure() && steps.scope.outputs.docs_only != 'true'

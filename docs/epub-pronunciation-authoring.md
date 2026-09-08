@@ -217,10 +217,10 @@ words omitted from the selective pronunciation audit.
 
 After building tests through the repository wrapper, run it with a fresh host
 output directory (the simulator receives environment variables prefixed with
-`SIMCTL_CHILD_`):
+`TEST_RUNNER_`):
 
 ```sh
-SIMCTL_CHILD_ECHO_EPUB_LISTENING_OUTPUT=/tmp/echo-epub-michael-proof \
+TEST_RUNNER_ECHO_EPUB_LISTENING_OUTPUT=/tmp/echo-epub-michael-proof \
   /Users/dfakkeldy/.claude/bin/xcode-build-slot.sh -- \
   make test-only FILTER=EchoTests/EPUBPronunciationTests/michaelListeningProof
 ```
