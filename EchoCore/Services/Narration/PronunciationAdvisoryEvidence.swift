@@ -456,7 +456,8 @@ nonisolated struct PronunciationAdvisoryEvidence: Codable, Equatable, Sendable {
         case .contextualHomograph:
             return decision.contextualEvidence?.familyState == .graduated
                 ? .qualified : .uncertain
-        case .occurrenceOverride, .bookOverride, .globalOverride, .builtInOverride,
+        case .occurrenceOverride, .bookOverride, .globalOverride, .epubInline, .epubLexicon,
+            .builtInOverride,
             .supplementalLexicon, .derivedMorphology, .monitoredLexicon:
             return .trusted
         }
@@ -531,7 +532,8 @@ nonisolated struct PronunciationAdvisoryIssueEvidence: Codable, Equatable, Senda
             return authority == .uncertain
         case .contextualHomograph:
             return authority == .qualified || authority == .uncertain
-        case .occurrenceOverride, .bookOverride, .globalOverride, .builtInOverride,
+        case .occurrenceOverride, .bookOverride, .globalOverride, .epubInline, .epubLexicon,
+            .builtInOverride,
             .supplementalLexicon, .derivedMorphology, .monitoredLexicon:
             return authority == .trusted
         }

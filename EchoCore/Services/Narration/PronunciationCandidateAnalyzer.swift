@@ -395,6 +395,7 @@ nonisolated struct PronunciationCandidateAnalyzer: Sendable {
         case .occurrenceOverride: return .occurrenceOverride
         case .bookOverride: return .bookOverride
         case .globalOverride: return .globalOverride
+        case .epubInline, .epubLexicon: return .trustedLexicon
         case .builtInOverride: return hasAlternatives ? .sourceDisagreement : .trustedLexicon
         case .contextualHomograph:
             return decision.contextualEvidence?.familyState == .graduated
@@ -414,7 +415,8 @@ nonisolated struct PronunciationCandidateAnalyzer: Sendable {
         case .contextualHomograph:
             return decision.contextualEvidence?.familyState == .graduated
                 ? .qualified : .uncertain
-        case .occurrenceOverride, .bookOverride, .globalOverride, .builtInOverride,
+        case .occurrenceOverride, .bookOverride, .globalOverride, .epubInline, .epubLexicon,
+            .builtInOverride,
             .supplementalLexicon, .derivedMorphology, .monitoredLexicon:
             return .trusted
         }
@@ -422,7 +424,8 @@ nonisolated struct PronunciationCandidateAnalyzer: Sendable {
 
     private func isOverride(_ source: PronunciationAuditDecision.Source) -> Bool {
         switch source {
-        case .occurrenceOverride, .bookOverride, .globalOverride, .builtInOverride:
+        case .occurrenceOverride, .bookOverride, .globalOverride, .epubInline, .epubLexicon,
+            .builtInOverride:
             return true
         case .contextualHomograph, .supplementalLexicon, .derivedMorphology,
             .monitoredLexicon, .fallback:

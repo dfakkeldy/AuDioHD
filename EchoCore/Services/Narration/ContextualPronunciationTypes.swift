@@ -283,7 +283,8 @@ nonisolated enum ContextualPronunciationEvidenceValidator {
         _ source: PronunciationAuditDecision.Source
     ) -> Bool {
         switch source {
-        case .occurrenceOverride, .bookOverride, .globalOverride, .builtInOverride:
+        case .occurrenceOverride, .bookOverride, .globalOverride, .epubInline, .epubLexicon,
+            .builtInOverride:
             return false
         case .contextualHomograph, .supplementalLexicon, .derivedMorphology,
             .monitoredLexicon, .fallback:

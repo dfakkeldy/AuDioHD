@@ -222,6 +222,9 @@ nonisolated enum NarrationFileNaming {
         components.reserveCapacity(components.count + spokenBlocks.count * 3)
         for (offset, block) in spokenBlocks.enumerated() {
             components.append("blockID:\(block.id.count):\(block.id)")
+            if let annotations = block.pronunciationAnnotations {
+                components.append("epubPronunciationV1:\(annotations.utf8.count):\(annotations)")
+            }
             components.append("blockKind:\(block.blockKind.count):\(block.blockKind)")
             let text = offset < renderedTexts.count ? renderedTexts[offset] : ""
             components.append("text:\(text.count):\(text)")

@@ -37,6 +37,7 @@ nonisolated struct EPubBlockRecord: Identifiable, Equatable, Hashable, Sendable,
     /// Trusted source chapter identity for generated anthologies. Generic EPUB
     /// imports leave this nil and retain their order-based identity.
     var sourceChapterKey: String? = nil
+    var pronunciationAnnotations: String? = nil
     var createdAt: String?
     var modifiedAt: String?
 
@@ -65,6 +66,7 @@ nonisolated struct EPubBlockRecord: Identifiable, Equatable, Hashable, Sendable,
         case narrationText = "narration_text"
         case codeLanguage = "code_language"
         case sourceChapterKey = "source_chapter_key"
+        case pronunciationAnnotations = "pronunciation_annotations"
         case createdAt = "created_at"
         case modifiedAt = "modified_at"
     }

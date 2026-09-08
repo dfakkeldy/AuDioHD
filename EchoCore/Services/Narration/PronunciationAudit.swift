@@ -157,6 +157,8 @@ nonisolated struct PronunciationAuditDecision: Codable, Equatable, Sendable {
         case bookOverride
         case globalOverride
         case builtInOverride
+        case epubInline
+        case epubLexicon
         case contextualHomograph
         case supplementalLexicon
         case derivedMorphology
@@ -430,7 +432,8 @@ nonisolated enum InvalidG2PAuditReceipt {
             return .verified(
                 expectedSelectionReason: advisoryEvidence.alternatives.isEmpty
                     ? .trustedLexicon : .sourceDisagreement)
-        case .occurrenceOverride, .bookOverride, .globalOverride, .builtInOverride,
+        case .occurrenceOverride, .bookOverride, .globalOverride, .epubInline, .epubLexicon,
+            .builtInOverride,
             .contextualHomograph, .supplementalLexicon, .derivedMorphology:
             return .invalid
         }
@@ -495,7 +498,8 @@ nonisolated struct PronunciationAuditManifest: Codable, Equatable, Sendable {
         make(
             renderVersion: renderVersion, voice: voice, chapterVoices: chapterVoices,
             blockVoiceProvenance: nil, captureCoverage: captureCoverage,
-            legacyChapterIndexes: legacyChapterIndexes, audiobookURL: audiobookURL, reelURL: reelURL,
+            legacyChapterIndexes: legacyChapterIndexes, audiobookURL: audiobookURL,
+            reelURL: reelURL,
             audiobookSHA256: audiobookSHA256, listeningReelSHA256: listeningReelSHA256,
             watchWords: watchWords, decisions: decisions, diagnostics: diagnostics)
     }
@@ -540,12 +544,14 @@ nonisolated struct PronunciationAuditManifest: Codable, Equatable, Sendable {
         }
 
         let resolvedBlockVoices = blockVoiceProvenance.map { provenance in
-            Dictionary(uniqueKeysWithValues: provenance.blockVoices.map { ($0.key, $0.value.rawValue) })
+            Dictionary(
+                uniqueKeysWithValues: provenance.blockVoices.map { ($0.key, $0.value.rawValue) })
         }
         let resolvedVoice: String
         if let resolvedBlockVoices {
             let distinctVoices = Set(resolvedBlockVoices.values)
-            resolvedVoice = distinctVoices.count == 1 ? distinctVoices.first ?? voice.rawValue : "mixed"
+            resolvedVoice =
+                distinctVoices.count == 1 ? distinctVoices.first ?? voice.rawValue : "mixed"
         } else {
             resolvedVoice = voice.rawValue
         }
@@ -555,7 +561,8 @@ nonisolated struct PronunciationAuditManifest: Codable, Equatable, Sendable {
             renderVersion: renderVersion,
             voice: resolvedVoice,
             chapterVoices: blockVoiceProvenance == nil
-                ? Dictionary(uniqueKeysWithValues: chapterVoices.map { (String($0.key), $0.value.rawValue) })
+                ? Dictionary(
+                    uniqueKeysWithValues: chapterVoices.map { (String($0.key), $0.value.rawValue) })
                 : [:],
             voicePlanSHA256: blockVoiceProvenance?.voicePlanSHA256,
             blockVoices: resolvedBlockVoices,
@@ -680,7 +687,7 @@ nonisolated struct PronunciationAuditManifest: Codable, Equatable, Sendable {
                     "plan pronunciation audit disagrees with block voices")
             }
             for decision in decisions
-                where blockVoices[AlignmentSidecar.portableSuffix(of: decision.blockID)] == nil {
+            where blockVoices[AlignmentSidecar.portableSuffix(of: decision.blockID)] == nil {
                 throw PronunciationArtifactIntegrity.IntegrityError.mismatch(
                     "pronunciation decision references a block absent from the voice plan")
             }
@@ -689,31 +696,31 @@ nonisolated struct PronunciationAuditManifest: Codable, Equatable, Sendable {
                 throw PronunciationArtifactIntegrity.IntegrityError.mismatch(
                     "legacy pronunciation audit cannot contain block voice provenance")
             }
-        for (chapterIndex, chapterVoice) in chapterVoices {
-            guard let parsedIndex = Int(chapterIndex),
-                parsedIndex >= 0,
-                String(parsedIndex) == chapterIndex
+            for (chapterIndex, chapterVoice) in chapterVoices {
+                guard let parsedIndex = Int(chapterIndex),
+                    parsedIndex >= 0,
+                    String(parsedIndex) == chapterIndex
+                else {
+                    throw PronunciationArtifactIntegrity.IntegrityError.mismatch(
+                        "pronunciation audit contains an invalid chapter voice key")
+                }
+                guard VoiceCatalog.voice(for: VoiceID(chapterVoice)) != nil else {
+                    throw PronunciationArtifactIntegrity.IntegrityError.mismatch(
+                        "pronunciation audit contains an unknown chapter voice")
+                }
+            }
+            let distinctChapterVoices = Set(chapterVoices.values)
+            guard voice != "mixed" || distinctChapterVoices.count > 1 else {
+                throw PronunciationArtifactIntegrity.IntegrityError.mismatch(
+                    "mixed pronunciation audit requires more than one chapter voice")
+            }
+            guard
+                voice == "mixed" || distinctChapterVoices.isEmpty
+                    || distinctChapterVoices == Set([voice])
             else {
                 throw PronunciationArtifactIntegrity.IntegrityError.mismatch(
-                    "pronunciation audit contains an invalid chapter voice key")
+                    "uniform pronunciation audit disagrees with chapter voices")
             }
-            guard VoiceCatalog.voice(for: VoiceID(chapterVoice)) != nil else {
-                throw PronunciationArtifactIntegrity.IntegrityError.mismatch(
-                    "pronunciation audit contains an unknown chapter voice")
-            }
-        }
-        let distinctChapterVoices = Set(chapterVoices.values)
-        guard voice != "mixed" || distinctChapterVoices.count > 1 else {
-            throw PronunciationArtifactIntegrity.IntegrityError.mismatch(
-                "mixed pronunciation audit requires more than one chapter voice")
-        }
-        guard
-            voice == "mixed" || distinctChapterVoices.isEmpty
-                || distinctChapterVoices == Set([voice])
-        else {
-            throw PronunciationArtifactIntegrity.IntegrityError.mismatch(
-                "uniform pronunciation audit disagrees with chapter voices")
-        }
         }
         guard PronunciationArtifactIntegrity.isLowercaseSHA256(audiobookSHA256) else {
             throw PronunciationArtifactIntegrity.IntegrityError.mismatch(
@@ -1044,7 +1051,8 @@ extension PronunciationAuditManifest {
     /// current-schema projection before making that claim for a legacy receipt.
     nonisolated private func currentSchemaEncodingProjection() -> PronunciationAuditManifest {
         PronunciationAuditManifest(
-            schemaVersion: voicePlanSHA256 == nil ? Self.currentSchemaVersion : Self.planSchemaVersion,
+            schemaVersion: voicePlanSHA256 == nil
+                ? Self.currentSchemaVersion : Self.planSchemaVersion,
             renderVersion: renderVersion,
             voice: voice,
             chapterVoices: chapterVoices,
@@ -1252,7 +1260,8 @@ nonisolated enum PronunciationAuditContext {
             return false
         }
         switch source {
-        case .occurrenceOverride, .bookOverride, .globalOverride, .builtInOverride:
+        case .occurrenceOverride, .bookOverride, .globalOverride, .epubInline, .epubLexicon,
+            .builtInOverride:
             return false
         default:
             return true

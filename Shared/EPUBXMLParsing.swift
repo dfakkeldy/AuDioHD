@@ -89,6 +89,7 @@ nonisolated struct TextBlockDescriptor: Sendable {
     let echoBlockIndex: Int?
     let echoNarration: String?
     let echoLinkNarrationValues: [String]
+    var pronunciationSpans: [EPUBPronunciationSpan] = []
 
     init(
         kind: EPubBlockRecord.Kind, text: String?, imagePath: String?, htmlContent: String?,
@@ -153,6 +154,7 @@ nonisolated final class ContainerXMLParser: NSObject, XMLParserDelegate {
 /// elements to produce `SpineItemDescriptor` values in reading order.
 nonisolated final class OPFParserDelegate: NSObject, XMLParserDelegate {
     var spineItems: [SpineItemDescriptor] = []
+    var pronunciationLexiconHrefs: [String] = []
     /// Preferred TOC source: the EPUB 3 nav document when present (labels are
     /// usually cleaner), otherwise the legacy NCX.
     var tocHref: String? { navHref ?? ncxHref }
@@ -186,6 +188,11 @@ nonisolated final class OPFParserDelegate: NSObject, XMLParserDelegate {
         qualifiedName qName: String?,
         attributes attributeDict: [String: String] = [:]
     ) {
+        if elementName == "item", attributeDict["media-type"] == "application/pls+xml",
+            let href = attributeDict["href"]
+        {
+            pronunciationLexiconHrefs.append(href)
+        }
         currentAttributes = attributeDict
         if elementName == "identifier" {
             metadataTarget = .identifier
@@ -304,7 +311,9 @@ private nonisolated func isXMLReference(in string: String, startingAt start: Str
     return false
 }
 
-private nonisolated func isXMLCharacterReference(in string: String, startingAt start: String.Index) -> Bool {
+private nonisolated func isXMLCharacterReference(in string: String, startingAt start: String.Index)
+    -> Bool
+{
     guard start < string.endIndex else { return false }
 
     var index = start
@@ -529,6 +538,7 @@ nonisolated final class TOCParserDelegate: NSObject, XMLParserDelegate {
 nonisolated final class XHTMLBlockDelegate: NSObject, XMLParserDelegate {
     var textBlocks: [TextBlockDescriptor] = []
     var documentTitle: String?
+    let pronunciation = EPUBInlinePronunciationTracker()
     private var currentText = ""
     private var currentHTML = ""
     private var inlineDepth = 0
@@ -592,7 +602,9 @@ nonisolated final class XHTMLBlockDelegate: NSObject, XMLParserDelegate {
         parser.delegate = self
         currentHTML = ""
         currentText = ""
-        parser.parse()
+        if !parser.parse(), pronunciation.hasInstructions {
+            pronunciation.fail("Malformed annotated XHTML.")
+        }
         flushBlock()
         documentTitle = documentTitle?.collapsedWhitespace()
     }
@@ -604,6 +616,14 @@ nonisolated final class XHTMLBlockDelegate: NSObject, XMLParserDelegate {
         qualifiedName: String?,
         attributes attributeDict: [String: String] = [:]
     ) {
+        pronunciation.pushNamespaces(attributeDict)
+        defer {
+            pronunciation.start(
+                element: elementName, attributes: attributeDict,
+                offset: currentText.count,
+                allowed: !isInsideHead && !isInPre && skipDepth == 0 && !isInFigcaption,
+                isBlock: blockTags.contains(elementName))
+        }
         if elementName == "figcaption", !figureStack.isEmpty, skipDepth == 0 {
             isInFigcaption = true
             return
@@ -873,6 +893,8 @@ nonisolated final class XHTMLBlockDelegate: NSObject, XMLParserDelegate {
         namespaceURI: String?,
         qualifiedName: String?
     ) {
+        pronunciation.end(element: elementName, text: currentText)
+        defer { pronunciation.popNamespaces() }
         if elementName == "figcaption", isInFigcaption {
             isInFigcaption = false
             return
@@ -984,6 +1006,7 @@ nonisolated final class XHTMLBlockDelegate: NSObject, XMLParserDelegate {
                         type: .chapterStart, payload: level,
                         epubCharOffset: max(0, currentCharOffset - heading.count - 1))
                 ]
+            let pronunciationSpans = pronunciation.flush(text: currentText)
             currentText = ""
             currentHTML = ""
             if !heading.isEmpty {
@@ -1004,6 +1027,9 @@ nonisolated final class XHTMLBlockDelegate: NSObject, XMLParserDelegate {
                         echoNarration: currentEchoNarration,
                         echoLinkNarrationValues: currentEchoLinkNarrationValues
                     ))
+                if !heading.isEmpty, !textBlocks.isEmpty {
+                    textBlocks[textBlocks.count - 1].pronunciationSpans = pronunciationSpans
+                }
                 pendingAnchorIDs = []
             }
             resetEchoAttributes()
@@ -1011,6 +1037,7 @@ nonisolated final class XHTMLBlockDelegate: NSObject, XMLParserDelegate {
     }
 
     private func flushBlock() {
+        let pronunciationSpans = pronunciation.flush(text: currentText)
         let text = currentText.trimmingCharacters(in: .whitespaces)
         let html = currentHTML.trimmingCharacters(in: .whitespaces)
         currentText = ""
@@ -1059,6 +1086,7 @@ nonisolated final class XHTMLBlockDelegate: NSObject, XMLParserDelegate {
                 echoNarration: currentEchoNarration,
                 echoLinkNarrationValues: currentEchoLinkNarrationValues
             ))
+        textBlocks[textBlocks.count - 1].pronunciationSpans = pronunciationSpans
         pendingAnchorIDs = []
         resetEchoAttributes()
     }
