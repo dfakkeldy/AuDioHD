@@ -370,7 +370,7 @@ struct EPUBPronunciationTests {
                 workDir: destination.appendingPathComponent("work"), voice: VoiceID("am_michael"),
                 title: "Pronunciation Proof — \(name)", author: "Echo", maxNewChaptersPerRun: nil)
             let result = try await HeadlessNarrationRunner().run(
-                config, tts: RecordingRealEngine(recorder: recorder))
+                config, tts: RecordingRealEngine(recorder: recorder, engine: OnnxKokoroEngine()))
             #expect(result.complete)
             let plans = await recorder.plans
             let voices = await recorder.voices
@@ -391,8 +391,11 @@ struct EPUBPronunciationTests {
 
     private final class RecordingRealEngine: TTSEngine {
         let recorder: PlanRecorder
-        let engine = OnnxKokoroEngine()
-        init(recorder: PlanRecorder) { self.recorder = recorder }
+        let engine: OnnxKokoroEngine
+        init(recorder: PlanRecorder, engine: OnnxKokoroEngine) {
+            self.recorder = recorder
+            self.engine = engine
+        }
         func prepare() async throws { try await engine.prepare() }
         func synthesize(_ text: String, voice: VoiceID) async throws -> TTSChunk {
             throw EPUBPronunciationError(detail: "Listening proof requires planned synthesis.")
