@@ -81,7 +81,9 @@ jobs:
         run: make renderer-install-test
 
       - name: Synthetic narration benchmark fixture tests
-        run: python3 -m unittest discover -s Tools/Pronunciation/tests -p test_narration_benchmark.py -v
+        run: |
+          python3 -m unittest discover -s Tools/Pronunciation/tests -p test_narration_benchmark.py -v
+          python3 -m unittest discover -s Tools/Pronunciation/tests -p test_epub_pronunciation_fixture.py -v
 
       # The audio-judge suite measures real media with ffprobe and transcodes
       # a real MP3 with ffmpeg. Those are hard requirements in the suite's
@@ -274,6 +276,10 @@ jobs:
       # identically under `-quiet`. The result bundle preserves the crash logs.
       - name: Test — EchoTests
         if: steps.scope.outputs.docs_only != 'true'
+        env:
+          # Public fixture only. Keep a real import-to-ONNX proof alongside the
+          # fast recording-engine tests; the local test remains opt-in.
+          SIMCTL_CHILD_ECHO_EPUB_LISTENING_OUTPUT: ${{ runner.temp }}/epub-pronunciation-proof
         run: |
           set -o pipefail
           rm -rf TestResults.xcresult
@@ -285,6 +291,15 @@ jobs:
             -parallel-testing-enabled NO \
             -resultBundlePath TestResults.xcresult \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload EPUB pronunciation proof
+        if: always() && steps.scope.outputs.docs_only != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: EPUBPronunciationProof-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/epub-pronunciation-proof
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Upload test result bundle
         if: failure() && steps.scope.outputs.docs_only != 'true'

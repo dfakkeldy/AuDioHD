@@ -602,7 +602,14 @@ nonisolated final class XHTMLBlockDelegate: NSObject, XMLParserDelegate {
         parser.delegate = self
         currentHTML = ""
         currentText = ""
-        if !parser.parse(), pronunciation.hasInstructions {
+        // This is only a declaration pre-scan for malformed XML, not text
+        // decoding. Removing NUL bytes also finds ASCII namespace declarations
+        // in UTF-16/32 before XMLParser can deliver its first element.
+        let source = String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\0", with: "")
+        let declaresPronunciation =
+            source.contains("www.w3.org/2001/10/synthesis")
+            || source.contains("application/pls+xml") || source.contains("ssml:ph")
+        if !parser.parse(), pronunciation.hasInstructions || declaresPronunciation {
             pronunciation.fail("Malformed annotated XHTML.")
         }
         flushBlock()
@@ -622,7 +629,7 @@ nonisolated final class XHTMLBlockDelegate: NSObject, XMLParserDelegate {
                 element: elementName, attributes: attributeDict,
                 offset: currentText.count,
                 allowed: !isInsideHead && !isInPre && skipDepth == 0 && !isInFigcaption,
-                isBlock: blockTags.contains(elementName))
+                inHead: isInsideHead)
         }
         if elementName == "figcaption", !figureStack.isEmpty, skipDepth == 0 {
             isInFigcaption = true

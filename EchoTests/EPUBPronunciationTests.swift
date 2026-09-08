@@ -108,6 +108,24 @@ struct EPUBPronunciationTests {
         #expect(decisions.map(\.selectedIPA) == ["pɔɹʃə", "pɔɹtʃə"])
     }
 
+    @Test func explicitUserGlobalsWinButBuiltInsDoNotBeatEPUB() throws {
+        let root = try copyFixture(body: "<p><span ssml:ph=\"kæmˈbɛl\">Campbell</span> smiled.</p>")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocks = try parseEPUBBlocks(audiobookID: "proof", epubURL: root).blocks
+        let builtIns = try NarrationRenderPlanner.make(
+            blocks: blocks, overrides: .withBuiltInDefaults([:]))
+        let authored = try #require(
+            builtIns.blocks.flatMap(\.pronunciationDecisions).first { $0.sourceWord == "Campbell" })
+        #expect(authored.source == .epubInline)
+        #expect(authored.selectedIPA == "kæmˈbɛl")
+        let user = try NarrationRenderPlanner.make(
+            blocks: blocks, overrides: .withBuiltInDefaults(["Campbell": "kæmbəl"]))
+        let corrected = try #require(
+            user.blocks.flatMap(\.pronunciationDecisions).first { $0.sourceWord == "Campbell" })
+        #expect(corrected.source == .globalOverride)
+        #expect(corrected.selectedIPA == "kæmbəl")
+    }
+
     @Test func phrasesRemainAtomicAcrossSmallChunks() throws {
         let blocks = try parseEPUBBlocks(audiobookID: "proof", epubURL: fixture()).blocks
         let plan = try NarrationRenderPlanner.make(
@@ -181,6 +199,17 @@ struct EPUBPronunciationTests {
         )
     }
 
+    @Test func httpsSSMLNamespaceIsAlsoAccepted() throws {
+        let root = try copyFixture(
+            body:
+                "<p><span xmlns:s=\"https://www.w3.org/2001/10/synthesis\" s:alphabet=\"ipa\" s:ph=\"bæs\">bass</span></p>"
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocks = try parseEPUBBlocks(audiobookID: "proof", epubURL: root).blocks
+        let plan = try NarrationRenderPlanner.make(blocks: blocks, overrides: .init(entries: [:]))
+        #expect(plan.blocks.last?.pronunciationDecisions.first?.source == .epubInline)
+    }
+
     @Test func remoteUndeclaredAndEscapingLexiconsAreRejected() throws {
         let root = try copyFixture()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -198,6 +227,38 @@ struct EPUBPronunciationTests {
         }
     }
 
+    @Test func malformedFirstAnnotationCannotDisappearSilently() throws {
+        let root = try copyFixture()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let xml = """
+            <html xmlns="http://www.w3.org/1999/xhtml" xmlns:ssml="http://www.w3.org/2001/10/synthesis" ssml:alphabet="ipa">
+            <head><title>Proof</title></head><body><p><span ssml:ph="pɔɹ&bad;">Portia</span></p></body></html>
+            """
+        for encoding in [String.Encoding.utf8, .utf16LittleEndian, .utf16BigEndian] {
+            try xml.data(using: encoding)!.write(
+                to: root.appendingPathComponent("EPUB/chapter.xhtml"))
+            #expect(throws: EPUBPronunciationError.self) {
+                try parseEPUBBlocks(audiobookID: "proof", epubURL: root)
+            }
+        }
+    }
+
+    @Test func inlineDoesNotConsumeAnAdjacentShorterLexiconEntry() throws {
+        let pls = """
+            <lexicon xmlns="http://www.w3.org/2005/01/pronunciation-lexicon" version="1.0" alphabet="ipa" xml:lang="en-US">
+            <lexeme><grapheme>New York</grapheme><phoneme>njuː jɔɹk</phoneme></lexeme>
+            <lexeme><grapheme>York</grapheme><phoneme>ˈjɔɹk</phoneme></lexeme></lexicon>
+            """
+        let root = try copyFixture(
+            body: "<p><span ssml:ph=\"ˈnjuː\">New</span> York.</p>", lexicon: pls)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocks = try parseEPUBBlocks(audiobookID: "proof", epubURL: root).blocks
+        let plan = try NarrationRenderPlanner.make(blocks: blocks, overrides: .init(entries: [:]))
+        #expect(plan.blocks.last?.pronunciationDecisions.map(\.sourceWord) == ["New", "York"])
+        #expect(
+            plan.blocks.last?.pronunciationDecisions.map(\.source) == [.epubInline, .epubLexicon])
+    }
+
     @Test func ambiguousPLSVariantsAreRejected() throws {
         let pls = """
             <lexicon xmlns="http://www.w3.org/2005/01/pronunciation-lexicon" alphabet="ipa" version="1.0" xml:lang="en-US">
@@ -208,7 +269,11 @@ struct EPUBPronunciationTests {
 
     private actor PlanRecorder {
         var plans: [PlannedSynthesisChunk] = []
-        func record(_ plan: PlannedSynthesisChunk) { plans.append(plan) }
+        var voices: [VoiceID] = []
+        func record(_ plan: PlannedSynthesisChunk, voice: VoiceID) {
+            plans.append(plan)
+            voices.append(voice)
+        }
     }
 
     private final class RecordingEngine: TTSEngine {
@@ -219,7 +284,7 @@ struct EPUBPronunciationTests {
             throw EPUBPronunciationError(detail: "Test expected planned synthesis, not raw text.")
         }
         func synthesize(_ plan: PlannedSynthesisChunk, voice: VoiceID) async throws -> TTSChunk {
-            await recorder.record(plan)
+            await recorder.record(plan, voice: voice)
             return TTSChunk(
                 samples: [Float](repeating: 0.1, count: 4800), sampleRate: 24_000, duration: 0.2)
         }
@@ -232,21 +297,29 @@ struct EPUBPronunciationTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let out = root.appendingPathComponent("proof.m4b")
         let sidecar = root.appendingPathComponent("proof.alignment.json")
-        var config = NarrationRunConfig(
+        let config = NarrationRunConfig(
             epubURL: root, outM4BURL: out, sidecarURL: sidecar,
             workDir: root.appendingPathComponent("work"), voice: VoiceID("am_michael"),
             title: "Pronunciation Proof", author: "Echo", maxNewChaptersPerRun: nil)
-        config.generatePronunciationReview = false
         let recorder = PlanRecorder()
         let result = try await HeadlessNarrationRunner().run(
             config, tts: RecordingEngine(recorder: recorder))
         #expect(result.complete)
+        let manifestURL = root.appendingPathComponent("proof.pronunciation-audit.json")
+        let manifest = try JSONDecoder().decode(
+            PronunciationAuditManifest.self, from: Data(contentsOf: manifestURL))
+        #expect(
+            manifest.decisions.filter { $0.source == .epubInline || $0.source == .epubLexicon }
+                .count == 5)
         let plans = await recorder.plans
         #expect(plans.contains { $0.g2pInputText.contains("[New York](/ˌnjuː ˈjɔɹk/)") })
         #expect(plans.contains { $0.phonemes.contains("bæs") && $0.phonemes.contains("bAs") })
         #expect(plans.allSatisfy { $0.pronunciationEvidenceValidation == .matched })
         let anchors = try AlignmentSidecar.decode(Data(contentsOf: sidecar))
         #expect(!anchors.isEmpty)
+        let expected = try parseEPUBBlocks(audiobookID: "proof", epubURL: root).blocks
+            .compactMap(\.text).flatMap { WordTokenizer.words(in: $0).map(String.init) }
+        #expect(anchors.flatMap { $0.words ?? [] }.map(\.word) == expected)
         let json = try String(contentsOf: sidecar, encoding: .utf8)
         #expect(!json.contains("ssml:ph"))
         #expect(!json.contains("ˈpɔɹʃə"))
@@ -263,6 +336,73 @@ struct EPUBPronunciationTests {
                 try EPUBPLSParser.parse(xml.data(using: encoding)!)
             }
         }
+    }
+
+    /// Opt-in real ONNX proof; ordinary unit tests use RecordingEngine and never
+    /// download a waveform model. The output directory must be fresh.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ECHO_EPUB_LISTENING_OUTPUT"] != nil))
+    func michaelListeningProof() async throws {
+        let outputPath = try #require(
+            ProcessInfo.processInfo.environment["ECHO_EPUB_LISTENING_OUTPUT"])
+        let output = URL(fileURLWithPath: outputPath)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        struct Receipt: Codable {
+            let voice: String
+            let displayText: String
+            let g2pInputText: String
+            let phonemes: String
+            let phonemeIDs: [Int32]
+        }
+        for name in ["baseline", "annotated"] {
+            let recorder = PlanRecorder()
+            let destination = output.appendingPathComponent(name)
+            #expect(!FileManager.default.fileExists(atPath: destination.path))
+            guard !FileManager.default.fileExists(atPath: destination.path) else {
+                throw EPUBPronunciationError(detail: "Listening proof output must be fresh.")
+            }
+            try FileManager.default.createDirectory(
+                at: destination, withIntermediateDirectories: true)
+            let source = fixture().deletingLastPathComponent().appendingPathComponent(
+                "pronunciation-\(name).epub")
+            let config = NarrationRunConfig(
+                epubURL: source, outM4BURL: destination.appendingPathComponent("\(name).m4b"),
+                sidecarURL: destination.appendingPathComponent("\(name).alignment.json"),
+                workDir: destination.appendingPathComponent("work"), voice: VoiceID("am_michael"),
+                title: "Pronunciation Proof — \(name)", author: "Echo", maxNewChaptersPerRun: nil)
+            let result = try await HeadlessNarrationRunner().run(
+                config, tts: RecordingRealEngine(recorder: recorder))
+            #expect(result.complete)
+            let plans = await recorder.plans
+            let voices = await recorder.voices
+            #expect(voices.allSatisfy { $0 == VoiceID("am_michael") })
+            let receipts = zip(plans, voices).map { plan, voice in
+                Receipt(
+                    voice: voice.rawValue,
+                    displayText: plan.displayText, g2pInputText: plan.g2pInputText,
+                    phonemes: plan.phonemes, phonemeIDs: plan.phonemeIDs)
+            }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(receipts).write(
+                to: destination.appendingPathComponent("dispatched-phonemes.json"))
+            #expect(plans.allSatisfy { $0.pronunciationEvidenceValidation == .matched })
+        }
+    }
+
+    private final class RecordingRealEngine: TTSEngine {
+        let recorder: PlanRecorder
+        let engine = OnnxKokoroEngine()
+        init(recorder: PlanRecorder) { self.recorder = recorder }
+        func prepare() async throws { try await engine.prepare() }
+        func synthesize(_ text: String, voice: VoiceID) async throws -> TTSChunk {
+            throw EPUBPronunciationError(detail: "Listening proof requires planned synthesis.")
+        }
+        func synthesize(_ plan: PlannedSynthesisChunk, voice: VoiceID) async throws -> TTSChunk {
+            let result = try await engine.synthesize(plan, voice: voice)
+            await recorder.record(plan, voice: voice)
+            return result
+        }
+        func unload() async { await engine.unload() }
     }
 
 }

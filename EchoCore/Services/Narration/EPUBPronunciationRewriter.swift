@@ -74,6 +74,6 @@ nonisolated enum EPUBPronunciationRewriter {
                     ruleID: "epub.\(span.source.rawValue).ipa-v1",
                     rationale: "Explicit EPUB pronunciation instruction."))
         }
-        return .init(text: result, decisionSeeds: seeds.reversed())
+        return .init(text: result, decisionSeeds: Array(seeds.reversed()))
     }
 }

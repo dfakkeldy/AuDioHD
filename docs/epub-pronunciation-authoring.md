@@ -12,8 +12,9 @@ text. Do not replace “Portia” with phonetic spelling.
 
 ## Inline occurrence instructions
 
-Use the namespace URI `http://www.w3.org/2001/10/synthesis` (HTTP, not HTTPS).
-The prefix can be `ssml` or another correctly bound prefix. `ssml:alphabet="ipa"`
+Use the namespace URI `http://www.w3.org/2001/10/synthesis`, as in the EPUB
+examples. Echo also accepts `https://www.w3.org/2001/10/synthesis`, which appears
+in the current EPUB TTS attribute tables. The prefix can be `ssml` or another correctly bound prefix. `ssml:alphabet="ipa"`
 may be inherited from an ancestor; `ssml:ph` applies only to its own element.
 
 ```xml
@@ -207,3 +208,28 @@ word timings enabled. Use `echo-cli narrate --help` for the current renderer
 arguments. Compare the Portia, New York, and bass decisions in each output's
 pronunciation audit. Do not compare against a resumed capture from a different
 input. No audiobook skill changes are part of this implementation.
+
+The opt-in `EPUBPronunciationTests/michaelListeningProof` test runs both archived
+EPUBs through the headless importer and the real ONNX engine. It records every
+successfully synthesized plan in `dispatched-phonemes.json` beside the M4B, sidecar,
+and pronunciation audit. This gives complete baseline phonemes even for ordinary
+words omitted from the selective pronunciation audit.
+
+After building tests through the repository wrapper, run it with a fresh host
+output directory (the simulator receives environment variables prefixed with
+`SIMCTL_CHILD_`):
+
+```sh
+SIMCTL_CHILD_ECHO_EPUB_LISTENING_OUTPUT=/tmp/echo-epub-michael-proof \
+  /Users/dfakkeldy/.claude/bin/xcode-build-slot.sh -- \
+  make test-only FILTER=EchoTests/EPUBPronunciationTests/michaelListeningProof
+```
+
+Use the build wrapper's allowed window or a user-authorized off-hours override;
+never bypass its memory checks. Without the environment variable, the acoustic
+proof is skipped and ordinary import-to-engine tests use a recording test double.
+
+CI explicitly enables the real-engine proof and uploads `EPUBPronunciationProof`
+artifacts (14-day retention), containing only this public fixture. Local unit
+tests leave it disabled unless the environment variable is supplied. CI's result
+is an acoustic pipeline check, not human listening acceptance.

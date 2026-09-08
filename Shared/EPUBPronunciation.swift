@@ -73,7 +73,9 @@ nonisolated final class EPUBInlinePronunciationTracker {
     private(set) var links: [String] = []
     private(set) var error: EPUBPronunciationError?
     private(set) var hasInstructions = false
-    private let ssml = "http://www.w3.org/2001/10/synthesis"
+    private let ssmlNamespaces: Set<String> = [
+        "http://www.w3.org/2001/10/synthesis", "https://www.w3.org/2001/10/synthesis",
+    ]
 
     func fail(_ detail: String) {
         if error == nil { error = EPUBPronunciationError(detail: detail) }
@@ -97,26 +99,30 @@ nonisolated final class EPUBInlinePronunciationTracker {
         attributes.first { key, _ in
             let parts = key.split(separator: ":", maxSplits: 1)
             return parts.count == 2 && parts[1] == name
-                && namespaces.last?[String(parts[0])] == ssml
+                && ssmlNamespaces.contains(namespaces.last?[String(parts[0])] ?? "")
         }?.value
     }
 
     func start(
-        element: String, attributes: [String: String], offset: Int, allowed: Bool, isBlock: Bool
+        element: String, attributes: [String: String], offset: Int, allowed: Bool, inHead: Bool
     ) {
         if element == "link",
             attributes["rel"]?.split(separator: " ").contains("pronunciation") == true
         {
             hasInstructions = true
-            guard attributes["type"] == "application/pls+xml", let href = attributes["href"],
+            guard inHead, attributes["type"] == "application/pls+xml",
+                let href = attributes["href"],
                 !href.isEmpty
             else {
-                fail("Pronunciation links require type application/pls+xml and a local href.")
+                fail(
+                    "Pronunciation links require placement in head, type application/pls+xml, and a local href."
+                )
                 return
             }
             links.append(href)
         }
-        if attributes["ssml:ph"] != nil && namespaces.last?["ssml"] != ssml {
+        if attributes["ssml:ph"] != nil && !ssmlNamespaces.contains(namespaces.last?["ssml"] ?? "")
+        {
             hasInstructions = true
             fail("ssml:ph requires the SSML namespace http://www.w3.org/2001/10/synthesis.")
         }
@@ -166,6 +172,17 @@ nonisolated final class EPUBInlinePronunciationTracker {
             fail("A pronunciation annotation cannot cross imported block boundaries.")
         }
         let leading = text.prefix(while: \.isWhitespace).count
+        for span in spans {
+            func isWordCharacter(_ character: Character?) -> Bool {
+                guard let character else { return false }
+                return character.isLetter || character.isNumber || "_’'".contains(character)
+            }
+            let before = text.prefix(span.start).last
+            let after = text.dropFirst(span.end).first
+            if isWordCharacter(before) || isWordCharacter(after) {
+                fail("Pronunciation annotations must cover whole words or phrases.")
+            }
+        }
         let result = spans.map {
             EPUBPronunciationSpan(
                 start: $0.start - leading, end: $0.end - leading,
@@ -251,7 +268,14 @@ nonisolated final class EPUBPLSParser: NSObject, XMLParserDelegate {
         stack.append(name)
     }
 
-    func parser(_ parser: XMLParser, foundCharacters text: String) { buffer += text }
+    func parser(_ parser: XMLParser, foundCharacters text: String) {
+        if stack.last == "grapheme" || stack.last == "phoneme" {
+            buffer += text
+        } else if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            failure = "Unexpected text outside PLS grapheme or phoneme."
+            parser.abortParsing()
+        }
+    }
 
     func parser(
         _ parser: XMLParser, didEndElement name: String, namespaceURI: String?,
@@ -335,6 +359,8 @@ nonisolated enum EPUBPronunciationImport {
                 let file = try FileHandle(forReadingFrom: url)
                 defer { try? file.close() }
                 data = try file.read(upToCount: 1_048_577) ?? Data()
+            } catch let error as EPUBPronunciationError {
+                throw error
             } catch { throw EPUBPronunciationError(detail: "Cannot read bundled PLS: \(href)") }
             for (word, ipa) in try EPUBPLSParser.parse(data) {
                 guard entries[word] == nil || entries[word] == ipa else {
@@ -355,15 +381,32 @@ nonisolated enum EPUBPronunciationImport {
                 let text = blocks[index].text
             else { continue }
             var spans = blocks[index].pronunciationSpans
-            for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-                guard let range = Range(match.range, in: text) else { continue }
-                let start = text.distance(from: text.startIndex, to: range.lowerBound)
-                let end = text.distance(from: text.startIndex, to: range.upperBound)
-                if spans.contains(where: { $0.start < end && start < $0.end }) { continue }
-                let word = String(text[range])
-                spans.append(
-                    .init(start: start, end: end, text: word, ipa: entries[word]!, source: .lexicon)
-                )
+            // Search only the unannotated intervals. A longer lexicon phrase
+            // crossing an inline span must not consume a shorter eligible match
+            // next to it (inline New + PLS York beside a PLS New York entry).
+            var gaps: [Range<Int>] = []
+            var previous = 0
+            for span in spans.sorted(by: { $0.start < $1.start }) {
+                if previous < span.start { gaps.append(previous..<span.start) }
+                previous = span.end
+            }
+            if previous < text.count { gaps.append(previous..<text.count) }
+            for gap in gaps {
+                let lower = text.index(text.startIndex, offsetBy: gap.lowerBound)
+                let upper = text.index(text.startIndex, offsetBy: gap.upperBound)
+                for match in regex.matches(
+                    in: text, options: .withTransparentBounds,
+                    range: NSRange(lower..<upper, in: text))
+                {
+                    guard let range = Range(match.range, in: text) else { continue }
+                    let start = text.distance(from: text.startIndex, to: range.lowerBound)
+                    let end = text.distance(from: text.startIndex, to: range.upperBound)
+                    let word = String(text[range])
+                    spans.append(
+                        .init(
+                            start: start, end: end, text: word, ipa: entries[word]!,
+                            source: .lexicon))
+                }
             }
             blocks[index].pronunciationSpans = spans.sorted { $0.start < $1.start }
         }
