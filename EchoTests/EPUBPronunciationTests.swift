@@ -295,17 +295,20 @@ struct EPUBPronunciationTests {
     {
         let root = try copyFixture()
         defer { try? FileManager.default.removeItem(at: root) }
-        let out = root.appendingPathComponent("proof.m4b")
-        let sidecar = root.appendingPathComponent("proof.alignment.json")
+        let output = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: output) }
+        let out = output.appendingPathComponent("proof.m4b")
+        let sidecar = output.appendingPathComponent("proof.alignment.json")
         let config = NarrationRunConfig(
             epubURL: root, outM4BURL: out, sidecarURL: sidecar,
-            workDir: root.appendingPathComponent("work"), voice: VoiceID("am_michael"),
+            workDir: output.appendingPathComponent("work"), voice: VoiceID("am_michael"),
             title: "Pronunciation Proof", author: "Echo", maxNewChaptersPerRun: nil)
         let recorder = PlanRecorder()
         let result = try await HeadlessNarrationRunner().run(
             config, tts: RecordingEngine(recorder: recorder))
         #expect(result.complete)
-        let manifestURL = root.appendingPathComponent("proof.pronunciation-audit.json")
+        let manifestURL = output.appendingPathComponent("proof.pronunciation-audit.json")
         let manifest = try JSONDecoder().decode(
             PronunciationAuditManifest.self, from: Data(contentsOf: manifestURL))
         #expect(
