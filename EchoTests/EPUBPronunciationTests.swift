@@ -285,8 +285,16 @@ struct EPUBPronunciationTests {
         }
         func synthesize(_ plan: PlannedSynthesisChunk, voice: VoiceID) async throws -> TTSChunk {
             await recorder.record(plan, voice: voice)
+            let wordCount = WordTokenizer.words(in: plan.displayText).count
+            let wordDuration = 0.2 / Double(max(1, wordCount))
+            let timings = (0..<wordCount).map { index in
+                ChunkWordTiming(
+                    wordIndex: index, start: Double(index) * wordDuration,
+                    end: Double(index + 1) * wordDuration)
+            }
             return TTSChunk(
-                samples: [Float](repeating: 0.1, count: 4800), sampleRate: 24_000, duration: 0.2)
+                samples: [Float](repeating: 0.1, count: 4800), sampleRate: 24_000, duration: 0.2,
+                wordTimings: timings)
         }
     }
 
@@ -378,6 +386,12 @@ struct EPUBPronunciationTests {
             let plans = await recorder.plans
             let voices = await recorder.voices
             #expect(voices.allSatisfy { $0 == VoiceID("am_michael") })
+            let anchors = try AlignmentSidecar.decode(
+                Data(contentsOf: destination.appendingPathComponent("\(name).alignment.json")))
+            let expectedWords = plans.flatMap {
+                WordTokenizer.words(in: $0.displayText).map(String.init)
+            }
+            #expect(anchors.flatMap { $0.words ?? [] }.map(\.word) == expectedWords)
             let receipts = zip(plans, voices).map { plan, voice in
                 Receipt(
                     voice: voice.rawValue,
