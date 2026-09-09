@@ -36,6 +36,12 @@ nonisolated struct PronunciationOverrides: Equatable, Sendable {
             uniqueKeysWithValues: scopedEntries.map { ($0.word, $0.ipa) })
     }
 
+    /// EPUB instructions outrank automatic built-ins, but never user entries.
+    var explicitUserEntries: PronunciationOverrides {
+        PronunciationOverrides(
+            scopedEntries: scopedEntries.filter { $0.source != .builtInOverride })
+    }
+
     /// Apply overrides to `text`, wrapping each matched whole word in link syntax.
     func apply(to text: String) -> String {
         rewrite(to: text, blockID: "").text

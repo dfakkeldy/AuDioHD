@@ -158,7 +158,7 @@ nonisolated enum NarrationRenderPlanner {
             let block = preparedBlock.block
             let isCode = EPubBlockRecord.Kind(rawValue: block.blockKind) == .code
             let normalized =
-                isCode
+                (isCode || block.pronunciationAnnotations != nil)
                 ? (block.text ?? "")
                 : TextNormalizer.normalize(block.text ?? "")
             if !isCode, isDecorativeSeparator(normalized) {
@@ -182,7 +182,11 @@ nonisolated enum NarrationRenderPlanner {
                 resolved = normalized
                 decisionSeeds = []
             } else {
-                let overrideResult = overrides.rewrite(to: normalized, blockID: block.id)
+                let userResult = overrides.explicitUserEntries.rewrite(
+                    to: normalized, blockID: block.id)
+                let epubResult = try EPUBPronunciationRewriter.rewrite(
+                    userResult.text, block: block)
+                let overrideResult = overrides.rewrite(to: epubResult.text, blockID: block.id)
                 let universalResult = UniversalPronunciationResolver.rewrite(
                     to: overrideResult.text,
                     blockID: block.id,
@@ -193,6 +197,8 @@ nonisolated enum NarrationRenderPlanner {
                     blockID: block.id)
                 decisionSeeds = uniqueDecisionSeeds(
                     preparedBlock.pronunciationDecisionSeeds
+                        + userResult.decisionSeeds
+                        + epubResult.decisionSeeds
                         + overrideResult.decisionSeeds
                         + universalResult.decisionSeeds
                         + homographResult.decisionSeeds)
@@ -214,29 +220,36 @@ nonisolated enum NarrationRenderPlanner {
                         throw error
                     }
                     let rawTokenDecisionSeeds: [PronunciationDecisionSeed] =
-                        rawResult.tokenEvidence.compactMap { evidence -> PronunciationDecisionSeed? in
-                        let normalizedWord = PronunciationAuditContext.normalizedWord(evidence.text)
-                        guard PronunciationAuditContext.isRejectedRawG2POutput(
-                            evidence.selectedPhonemes)
-                        else {
-                            return nil
-                        }
-                        return PronunciationAuditContext.decisionSeed(
-                            for: evidence,
-                            blockID: block.id,
-                            chunkDisplayText: MisakiPronunciationMarkup.displayText(from: fragment),
-                            blockDisplayText: blockDisplayText,
-                            wordBase: wordBase,
-                            isComparisonCandidate:
-                                !pronunciationAuditPack.alternatives(for: normalizedWord).isEmpty
+                        rawResult.tokenEvidence.compactMap {
+                            evidence -> PronunciationDecisionSeed? in
+                            let normalizedWord = PronunciationAuditContext.normalizedWord(
+                                evidence.text)
+                            guard
+                                PronunciationAuditContext.isRejectedRawG2POutput(
+                                    evidence.selectedPhonemes)
+                            else {
+                                return nil
+                            }
+                            return PronunciationAuditContext.decisionSeed(
+                                for: evidence,
+                                blockID: block.id,
+                                chunkDisplayText: MisakiPronunciationMarkup.displayText(
+                                    from: fragment),
+                                blockDisplayText: blockDisplayText,
+                                wordBase: wordBase,
+                                isComparisonCandidate:
+                                    !pronunciationAuditPack.alternatives(for: normalizedWord)
+                                    .isEmpty
                                     || (pronunciationPack.hasExplicitCandidate(for: normalizedWord)
                                         && pronunciationPack.automaticCandidate(
-                                            for: normalizedWord) == nil))
-                    }
+                                            for: normalizedWord) == nil)
+                            )
+                        }
                     decisionSeeds = uniqueDecisionSeeds(
-                        decisionSeeds + prioritizingContextualFamilySeeds(
-                            rawTokenDecisionSeeds,
-                            contextualEvidence: unusedContextualEvidence))
+                        decisionSeeds
+                            + prioritizingContextualFamilySeeds(
+                                rawTokenDecisionSeeds,
+                                contextualEvidence: unusedContextualEvidence))
                     let rescueChunk = try planner.planDeterministicSpellingRescue(
                         displayText: MisakiPronunciationMarkup.displayText(from: fragment))
                     synthesisChunks.append(rescueChunk)
@@ -253,16 +266,18 @@ nonisolated enum NarrationRenderPlanner {
                         wordBase: wordBase,
                         isComparisonCandidate:
                             !pronunciationAuditPack.alternatives(for: normalizedWord).isEmpty
-                                || (pronunciationPack.hasExplicitCandidate(for: normalizedWord)
-                                    && pronunciationPack.automaticCandidate(
-                                        for: normalizedWord) == nil))
+                            || (pronunciationPack.hasExplicitCandidate(for: normalizedWord)
+                                && pronunciationPack.automaticCandidate(
+                                    for: normalizedWord) == nil)
+                    )
                 }
                 // Explicit rewrite-stage decisions remain first so they win any
                 // collision with evidence emitted by the final G2P pass.
                 decisionSeeds = uniqueDecisionSeeds(
-                    decisionSeeds + prioritizingContextualFamilySeeds(
-                        tokenDecisionSeeds,
-                        contextualEvidence: unusedContextualEvidence))
+                    decisionSeeds
+                        + prioritizingContextualFamilySeeds(
+                            tokenDecisionSeeds,
+                            contextualEvidence: unusedContextualEvidence))
                 synthesisChunks.append(chunk)
                 wordBase += chunk.wordCount
             }
@@ -282,10 +297,12 @@ nonisolated enum NarrationRenderPlanner {
             }
             let fallbackHits = synthesisChunks.flatMap(\.pronunciationFallbackHits)
             decisionSeeds = decisionSeeds.map { seed in
-                guard let evidence = candidateAnalyzer.evidence(
-                    for: seed,
-                    fallbackHits: fallbackHits,
-                    isWatchWord: PronunciationWatchVocabulary.words.contains(seed.normalizedWord))
+                guard
+                    let evidence = candidateAnalyzer.evidence(
+                        for: seed,
+                        fallbackHits: fallbackHits,
+                        isWatchWord: PronunciationWatchVocabulary.words.contains(
+                            seed.normalizedWord))
                 else {
                     return seed
                 }
@@ -295,6 +312,20 @@ nonisolated enum NarrationRenderPlanner {
                 from: decisionSeeds,
                 synthesisChunks: synthesisChunks,
                 requiresContextualEvidence: requiresContextualEvidence)
+            for seed in decisionSeeds
+            where seed.source == .epubInline || seed.source == .epubLexicon {
+                guard
+                    pronunciationMaterialization.decisions.contains(where: {
+                        $0.wordStart == seed.wordStart && $0.wordEnd == seed.wordEnd
+                            && $0.source == seed.source
+                    })
+                else {
+                    throw EPUBPronunciationError(
+                        detail:
+                            "Synthesis did not preserve the instructed phonemes in block \(block.blockIndex)."
+                    )
+                }
+            }
             planned.append(
                 NarrationPlannedBlock(
                     blockID: block.id,
@@ -657,10 +688,11 @@ nonisolated enum NarrationRenderPlanner {
         guard !contextualEvidence.isEmpty else { return seeds }
         func isEvidencedFamilySeed(_ seed: PronunciationDecisionSeed) -> Bool {
             ContextualPronunciationFamilies.family(for: seed.normalizedWord) != nil
-                && contextualEvidence[ContextualPronunciationKey(
-                    blockID: seed.blockID,
-                    wordStart: seed.wordStart,
-                    wordEnd: seed.wordEnd)] != nil
+                && contextualEvidence[
+                    ContextualPronunciationKey(
+                        blockID: seed.blockID,
+                        wordStart: seed.wordStart,
+                        wordEnd: seed.wordEnd)] != nil
         }
         let familySeeds = seeds.filter(isEvidencedFamilySeed)
         guard !familySeeds.isEmpty else { return seeds }

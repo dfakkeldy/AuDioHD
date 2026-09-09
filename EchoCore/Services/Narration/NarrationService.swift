@@ -333,7 +333,9 @@ final class NarrationService {
                 renderedTexts.append(cueText)
                 continue
             }
-            let normalized = TextNormalizer.normalize(block.text ?? "")
+            let normalized =
+                (block.pronunciationAnnotations == nil
+                    ? TextNormalizer.normalize(block.text ?? "") : (block.text ?? ""))
             renderedTexts.append(
                 Self.renderedText(
                     fromNormalized: normalized,
@@ -398,7 +400,8 @@ final class NarrationService {
             guard let text = block.text, !text.isEmpty, !block.isHidden,
                 NarrationCodeBlockCue.spokenText(for: block) == nil
             else { continue }
-            result[block.id] = TextNormalizer.normalize(text)
+            result[block.id] =
+                block.pronunciationAnnotations == nil ? TextNormalizer.normalize(text) : text
         }
         return result
     }
@@ -1205,8 +1208,14 @@ final class NarrationService {
             let isMain = Self.debugIsMainThread()
             debugRenderPlanningRanOnMainThread.withLock { $0 = isMain }
         #endif
+        let discoveryBlocks = try preparedBlocks.map { prepared in
+            var block = prepared.block
+            let userText = overrides.explicitUserEntries.apply(to: block.text ?? "")
+            block.text = try EPUBPronunciationRewriter.rewrite(userText, block: block).text
+            return block
+        }
         let contextualOccurrences = ContextualPronunciationDiscovery.discover(
-            blocks: preparedBlocks.map(\.block), overrides: overrides)
+            blocks: discoveryBlocks, overrides: overrides)
         let contextualEvidence = try await ContextualPronunciationPreflight.run(
             occurrences: contextualOccurrences,
             evaluator: contextualPronunciationEvaluator,
@@ -1300,9 +1309,13 @@ final class NarrationService {
                 continue
             }
 
-            let normalized = normalizedByID[block.id] ?? TextNormalizer.normalize(block.text ?? "")
+            let normalized =
+                normalizedByID[block.id]
+                ?? (block.pronunciationAnnotations == nil
+                    ? TextNormalizer.normalize(block.text ?? "") : (block.text ?? ""))
             let refined =
-                fmEnabled ? await FMNormalizer.refine(normalized, cache: fmCache) : normalized
+                fmEnabled && block.pronunciationAnnotations == nil
+                ? await FMNormalizer.refine(normalized, cache: fmCache) : normalized
             if refined != normalized {
                 do {
                     try await db.write { db in

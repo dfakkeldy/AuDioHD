@@ -219,6 +219,11 @@ final class DatabaseService {
                 index: "idx_alignment_anchor_epub_block", on: "alignment_anchor",
                 columns: ["epub_block_id"], ifNotExists: true)
         }
+        migrator.registerMigration("v43_epub_pronunciation_annotations") { db in
+            try db.alter(table: "epub_block") { table in
+                table.add(column: "pronunciation_annotations", .text)
+            }
+        }
         return migrator
     }
 }
