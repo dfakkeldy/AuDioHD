@@ -71,7 +71,9 @@ nonisolated enum NarrationFileNaming {
     /// verb before lexicon lookup, changing narration bytes for the same
     /// source text.
     /// v25 = linking-verb content disambiguation and validated identifier splits.
-    static let renderVersion = 25
+    /// v26 = explicit pronunciation spans bind to final Unicode string indices,
+    /// preventing an already-instructed possessive suffix from being voiced twice.
+    static let renderVersion = 26
     /// Stable renderer-family identity persisted beside headless captures. The
     /// cache render version tracks byte-affecting revisions within this family;
     /// this value prevents a different engine/G2P stack from inheriting them.

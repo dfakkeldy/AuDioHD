@@ -204,3 +204,27 @@ let texts: [(originalText: String, requiredPhonemes: [String])] = [
   #expect(noun.fallbackHits.isEmpty)
   #expect(adjective.fallbackHits.isEmpty)
 }
+
+@Test(arguments: ["", "“", "🐈 ", "Cafe\u{301} "])
+func testExplicitPossessivePronunciationIsAppliedOnce(prefix: String) throws {
+  let result = EnglishG2P(british: false).phonemizeWithMetadata(
+    text: "\(prefix)[Caesar’s](/ˈsiːzɚz/) wife."
+  )
+  #expect(result.tokens.map { $0.text + $0.whitespace }.joined() == "\(prefix)Caesar’s wife.")
+  let token = try #require(result.tokens.first { $0.text == "Caesar’s" })
+  #expect(token.text == "Caesar’s")
+  #expect(token.phonemes == "ˈsiːzɚz")
+  #expect(token.whitespace == " ")
+  #expect(result.tokens.filter { $0.text == "’s" }.isEmpty)
+}
+
+@Test func testRepeatedUnicodeAndPhrasePronunciationsKeepTheirOwnRanges() throws {
+  let result = EnglishG2P(british: false).phonemizeWithMetadata(
+    text: "“[Caesar’s](/ˈsiːzɚz/) [New York](/nˈu jˈɔɹk/) map,” [Brutus’s](/ˈbɹuːtəsɪz/) [Caesar’s](/ˈsiːzɚz/) map."
+  )
+  let fixed = result.tokens.filter { $0._.rating == 5 }
+  #expect(fixed.map(\.text) == ["Caesar’s", "New York", "Brutus’s", "Caesar’s"])
+  #expect(fixed.map(\.phonemes) == ["ˈsiːzɚz", "nˈu jˈɔɹk", "ˈbɹuːtəsɪz", "ˈsiːzɚz"])
+  #expect(result.tokens.map { $0.text + $0.whitespace }.joined()
+    == "“Caesar’s New York map,” Brutus’s Caesar’s map.")
+}
