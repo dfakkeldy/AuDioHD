@@ -5,20 +5,18 @@ import Testing
 @testable import Echo
 
 @Suite struct NarrationFileNamingTests {
-    @Test func renderVersionRegeneratesCachesForAtomicQualityRetry() {
-        // v25 changes contextual content pronunciation and identifier normalization.
-        // Earlier versions retagged sentence-initial imperative heteronyms as verbs before
-        // lexicon lookup, so v23 audio and pronunciation evidence may not be
-        // reused.
-        #expect(NarrationFileNaming.renderVersion == 25)
+    @Test func renderVersionRegeneratesCachesForUnicodePronunciationSpans() {
+        // v26 fixes explicit Unicode pronunciation spans; v25 may have voiced
+        // a possessive suffix twice and its audio/evidence must not be reused.
+        #expect(NarrationFileNaming.renderVersion == 26)
         let current = NarrationFileNaming.chapterFileName(
             audiobookID: "book",
             chapterIndex: 0,
             voice: VoiceID("af_heart"),
             contentSignature: "0123456789abcdef")
-        let previous = current.replacing("-v25.m4a", with: "-v24.m4a")
+        let previous = current.replacing("-v26.m4a", with: "-v25.m4a")
 
-        #expect(current.hasSuffix("-v25.m4a"))
+        #expect(current.hasSuffix("-v26.m4a"))
         #expect(
             NarrationFileNaming.isCurrentChapterCacheFileName(
                 current,
@@ -63,12 +61,12 @@ import Testing
             NarrationFileNaming.chapterFileName(
                 audiobookID: "book", chapterIndex: 3, voice: voice,
                 contentSignature: "abc")
-                == "book-ch3-habc-af_heart-v25.m4a")
+                == "book-ch3-habc-af_heart-v26.m4a")
         #expect(
             NarrationFileNaming.segmentFileName(
                 audiobookID: "book", chapterIndex: 3, segmentIndex: 2,
                 voice: voice, contentSignature: "abc")
-                == "book-ch3-s2-habc-af_heart-v25.m4a")
+                == "book-ch3-s2-habc-af_heart-v26.m4a")
         #expect(
             NarrationFileNaming.location(fromFileName: "book-ch3-s2-habc-af_heart-v22.m4a")
                 == NarrationCacheLocation(
@@ -143,10 +141,10 @@ import Testing
                 .chapterIndex == 3)
         #expect(
             NarrationFileNaming.location(
-                fromFileName: "book-ck0123456789abcdef0123456789abcdef-af_heart-v25.m4a")?
+                fromFileName: "book-ck0123456789abcdef0123456789abcdef-af_heart-v26.m4a")?
                 .stableChapterToken != nil)
         #expect(
-            NarrationFileNaming.location(fromFileName: "\(stablePrefix)-plan-0123456789ab-v25.m4a")?
+            NarrationFileNaming.location(fromFileName: "\(stablePrefix)-plan-0123456789ab-v26.m4a")?
                 .stableChapterToken != nil)
     }
 

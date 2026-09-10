@@ -174,7 +174,10 @@ final public class EnglishG2P {
 
     var result = ""
     var tokens: [String] = []
-    var features: [PreprocessFeature] = []
+    // Appending NSString-derived graphemes can change String's backing encoding.
+    // Keep offsets until the display string is complete; indices captured during
+    // construction cannot be compared with the final NLTagger token indices.
+    var features: [(value: PreprocessFeature.Value, range: NSRange)] = []
 
     let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
     var lastEnd = input.startIndex
@@ -184,9 +187,9 @@ final public class EnglishG2P {
     linkRegex.enumerateMatches(in: input, options: [], range: fullRange) { match, _, _ in
       guard let m = match else { return }
 
-      let range = m.range
-      let start = input.index(input.startIndex, offsetBy: range.location)
-      let end = input.index(start, offsetBy: range.length)
+      guard let range = Range(m.range, in: input) else { return }
+      let start = range.lowerBound
+      let end = range.upperBound
 
       result += String(input[lastEnd..<start])
       tokens.append(contentsOf: String(input[lastEnd..<start]).split(separator: " ").map(String.init))
@@ -194,20 +197,19 @@ final public class EnglishG2P {
       let grapheme = ns.substring(with: m.range(at: 1))
       let phoneme = ns.substring(with: m.range(at: 2))
       
-      let tokenStartIndex = result.endIndex
+      let tokenRange = NSRange(location: result.utf16.count, length: grapheme.utf16.count)
       result += grapheme
-      let tokenRange = tokenStartIndex..<result.endIndex
 
       if let intValue = Int(phoneme) {
-        features.append(PreprocessFeature(value: .int(intValue), tokenRange: tokenRange))
+        features.append((value: .int(intValue), range: tokenRange))
       } else if ["0.5", "+0.5"].contains(phoneme) {
-        features.append(PreprocessFeature(value: .double(0.5), tokenRange: tokenRange))
+        features.append((value: .double(0.5), range: tokenRange))
       } else if phoneme == "-0.5" {
-        features.append(PreprocessFeature(value: .double(-0.5), tokenRange: tokenRange))
+        features.append((value: .double(-0.5), range: tokenRange))
       } else if phoneme.count > 1 && phoneme.first == "/" && phoneme.last == "/" {
-        features.append(PreprocessFeature(value: .string(String(phoneme.dropLast())), tokenRange: tokenRange))
+        features.append((value: .string(String(phoneme.dropLast())), range: tokenRange))
       } else if phoneme.count > 1 && phoneme.first == "#" && phoneme.last == "#" {
-        features.append(PreprocessFeature(value: .string(String(phoneme.dropLast())), tokenRange: tokenRange))
+        features.append((value: .string(String(phoneme.dropLast())), range: tokenRange))
       }
 
       tokens.append(grapheme)
@@ -219,7 +221,13 @@ final public class EnglishG2P {
       tokens.append(contentsOf: String(input[lastEnd...]).split(separator: " ").map(String.init))
     }
     
-    return (text: result, tokens: tokens, features: features)
+    result.makeContiguousUTF8()
+    let boundFeatures = features.map { feature in
+      let lower = String.Index(utf16Offset: feature.range.location, in: result)
+      let upper = String.Index(utf16Offset: NSMaxRange(feature.range), in: result)
+      return PreprocessFeature(value: feature.value, tokenRange: lower..<upper)
+    }
+    return (text: result, tokens: tokens, features: boundFeatures)
   }
     
   private func tokenize(preprocessedText: PreprocessTuple) -> [MToken] {

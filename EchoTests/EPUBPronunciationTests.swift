@@ -28,6 +28,46 @@ struct EPUBPronunciationTests {
         #expect(selected.filter { $0.sourceWord == "bass" }.map(\.selectedIPA) == ["bæs", "bAs"])
         #expect(plan.pronunciationAuditDiagnostics.isEmpty)
     }
+    @Test(arguments: [false, true], [20, 420])
+    func possessiveInstructionsKeepExactWordAndTokenRanges(inline: Bool, budget: Int) throws {
+        let body =
+            inline
+            ? "<p><span ssml:ph=\"ˈsiːzɚz\">Caesar’s</span> book is <span ssml:ph=\"ˈbɹuːtəsɪz\">Brutus’s</span>. <span ssml:ph=\"ˈsiːzɚz\">Caesar’s</span> book.</p>"
+            : "<p>Caesar’s book is Brutus’s. Caesar’s book.</p>"
+        let root = try copyFixture(
+            body: body,
+            lexicon: """
+                <lexicon xmlns="http://www.w3.org/2005/01/pronunciation-lexicon" version="1.0" alphabet="ipa" xml:lang="en-US">
+                  <lexeme><grapheme>Caesar’s</grapheme><phoneme>ˈsiːzɚz</phoneme></lexeme>
+                  <lexeme><grapheme>Brutus’s</grapheme><phoneme>ˈbɹuːtəsɪz</phoneme></lexeme>
+                </lexicon>
+                """)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let blocks = try parseEPUBBlocks(audiobookID: "proof", epubURL: root).blocks
+        let plan = try NarrationRenderPlanner.make(
+            blocks: blocks, overrides: .init(entries: [:]), maxPhonemes: budget)
+        let block = try #require(plan.blocks.last)
+        let decisions = block.pronunciationDecisions
+        #expect(decisions.map(\.sourceWord) == ["Caesar’s", "Brutus’s", "Caesar’s"])
+        #expect(decisions.map(\.wordStart) == [0, 3, 4])
+        #expect(decisions.map(\.wordEnd) == [0, 3, 4])
+        #expect(decisions.map(\.selectedIPA) == ["ˈsiːzɚz", "ˈbɹuːtəsɪz", "ˈsiːzɚz"])
+        #expect(decisions.allSatisfy { $0.source == (inline ? .epubInline : .epubLexicon) })
+        #expect(decisions.first?.kokoroTokenIDs == [156, 61, 51, 158, 68, 85, 68])
+        let vocab = try KokoroPhonemeVocab()
+        for decision in decisions {
+            #expect(
+                decision.kokoroTokenIDs
+                    == Array(
+                        try vocab.validatedIDs(forPhonemes: decision.selectedIPA).dropFirst()
+                            .dropLast()))
+        }
+        #expect(
+            block.synthesisChunks.map(\.displayText).joined(separator: " ") == blocks.last?.text)
+        #expect(block.synthesisChunks.allSatisfy { $0.pronunciationEvidenceValidation == .matched })
+        #expect(plan.pronunciationAuditDiagnostics.isEmpty)
+    }
+
     private func copyFixture(body: String? = nil, lexicon: String? = nil) throws -> URL {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.copyItem(at: fixture(), to: root)
